@@ -155,7 +155,20 @@ TRANSLATIONS = {
         "btn_submit_feedback": "✉️ Gửi Ý Kiến",
         "feedback_success": "🙏 Cảm ơn bạn! Ý kiến đóng góp đã được ghi nhận.",
         "feedback_history": "📜 Lịch sử góp ý của bạn:",
-        "feedback_empty": "Chưa có ý kiến nào được gửi từ tài khoản này."
+        "feedback_empty": "Chưa có ý kiến nào được gửi từ tài khoản này.",
+        
+        # Donate Modal
+        "donate_btn": "☕ Ủng hộ phát triển",
+        "donate_title": "💖 Đồng Hành & Ủng Hộ Phát Triển",
+        "donate_desc": "Nếu ứng dụng giúp ích cho công việc kế toán của bạn, hãy gửi một chút yêu thương (ly cà phê ☕) để tiếp sức phát triển thêm nhiều tính năng mới!",
+        "donate_qr_caption": "Quét mã MoMo / Napas 247 - NGUYỄN HOÀNG GIANG",
+        "donate_info_owner": "Chủ tài khoản: **NGUYỄN HOÀNG GIANG**",
+        "donate_info_method": "Hình thức: **MoMo / VietQR Napas 247**",
+        "donate_btn_confirm": "💖 Tôi Đã Gửi Ủng Hộ!",
+        "donate_thanks_title": "🎉 Cảm ơn tấm lòng vàng của bạn!",
+        "donate_thanks_desc": "Chúc bạn luôn dồi dào sức khỏe, công việc hanh thông và quyết toán thuế thuận lợi!",
+        "donate_panda_caption": "Cảm ơn bạn rất nhiều! Nhận em 3 lạy ❤️",
+        "donate_btn_show_qr": "🔄 Xem lại mã QR ủng hộ"
     },
     
     "en": {
@@ -312,7 +325,20 @@ TRANSLATIONS = {
         "btn_submit_feedback": "✉️ Submit Feedback",
         "feedback_success": "🙏 Thank you! Your feedback has been recorded.",
         "feedback_history": "📜 Previously Submitted Feedback:",
-        "feedback_empty": "No feedback submitted yet from this user account."
+        "feedback_empty": "No feedback submitted yet from this user account.",
+        
+        # Donate Modal
+        "donate_btn": "☕ Support the App",
+        "donate_title": "💖 Support App Development",
+        "donate_desc": "If this tool helps your daily accounting workflow, consider buying me a coffee ☕ to support continuous improvements!",
+        "donate_qr_caption": "Scan via MoMo / Napas 247 - NGUYEN HOANG GIANG",
+        "donate_info_owner": "Account Name: **NGUYEN HOANG GIANG**",
+        "donate_info_method": "Method: **MoMo / VietQR Napas 247**",
+        "donate_btn_confirm": "💖 I Have Donated!",
+        "donate_thanks_title": "🎉 Thank you so much for your support!",
+        "donate_thanks_desc": "Wishing you great health, seamless workflow, and smooth financial audits!",
+        "donate_panda_caption": "Thank you so much! Sending deep gratitude ❤️",
+        "donate_btn_show_qr": "🔄 Show QR Code Again"
     },
     
     "zh": {
@@ -469,7 +495,20 @@ TRANSLATIONS = {
         "btn_submit_feedback": "✉️ 提交意见反馈",
         "feedback_success": "🙏 非常感谢！您的反馈已成功记录至系统。",
         "feedback_history": "📜 历史提交的反馈记录：",
-        "feedback_empty": "当前用户账户暂未提交任何反馈。"
+        "feedback_empty": "当前用户账户暂未提交任何反馈。",
+        
+        # Donate Modal
+        "donate_btn": "☕ 赞助支持应用",
+        "donate_title": "💖 携手支持持续开发",
+        "donate_desc": "如果本系统对您的财会工作有所帮助，欢迎请开发者喝杯咖啡 ☕ 助力更多新功能研发！",
+        "donate_qr_caption": "扫描 MoMo / VietQR Napas 247 二维码 - NGUYEN HOANG GIANG",
+        "donate_info_owner": "账户姓名：**NGUYEN HOANG GIANG (阮黄江)**",
+        "donate_info_method": "支持方式：**MoMo / VietQR 银联 Napas 247**",
+        "donate_btn_confirm": "💖 我已完成赞助！",
+        "donate_thanks_title": "🎉 非常感谢您的慷慨赞助与支持！",
+        "donate_thanks_desc": "祝您身体健康、工作顺利、财源广进、税务清算万事顺遂！",
+        "donate_panda_caption": "非常感谢您的支持！给您作揖啦 ❤️",
+        "donate_btn_show_qr": "🔄 重新查看赞助二维码"
     }
 }
 

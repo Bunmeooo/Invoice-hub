@@ -51,6 +51,8 @@ if "custom_export_dir" not in st.session_state:
     st.session_state["custom_export_dir"] = os.path.join(os.path.expanduser("~"), "Downloads")
 if "preview_data" not in st.session_state:
     st.session_state["preview_data"] = []
+if "donated_confirmed" not in st.session_state:
+    st.session_state["donated_confirmed"] = False
 
 lang = st.session_state["lang"]
 theme = st.session_state["theme"]
@@ -1590,12 +1592,12 @@ if plan == "pro":
 # 💬 CHÂN TRANG: BẢO MẬT & ĐÓNG GÓP Ý KIẾN (COMPACT FOOTER - FULL 1 MÀN HÌNH)
 # =========================================================================
 st.markdown("---")
-b_left, b_right = st.columns([3, 1.2])
+b_left, b_mid, b_right = st.columns([2.2, 1.1, 1.1])
 
 with b_left:
     st.markdown("<div style='display: flex; align-items: center; height: 100%; font-size: 12px; color: #64748B;'>🔒 <b>Bảo mật On-Device 100%</b>: Dữ liệu hóa đơn và báo cáo tài chính được xử lý hoàn toàn cục bộ trên máy tính của bạn.</div>", unsafe_allow_html=True)
 
-with b_right:
+with b_mid:
     with st.popover(t("feedback_btn", lang), use_container_width=True):
         st.markdown(f"### {t('feedback_title', lang)}")
         st.markdown(f"**{t('feedback_rating', lang)}**")
@@ -1640,6 +1642,36 @@ with b_right:
                 )
         else:
             st.caption(t("feedback_empty", lang))
+
+with b_right:
+    with st.popover(t("donate_btn", lang), use_container_width=True):
+        st.markdown(f"### {t('donate_title', lang)}")
+        st.caption(t("donate_desc", lang))
+        
+        assets_dir = os.path.join(os.path.dirname(__file__), "assets")
+        qr_img_path = os.path.join(assets_dir, "donate_qr.png")
+        panda_img_path = os.path.join(assets_dir, "thank_you_panda.png")
+        
+        if st.session_state.get("donated_confirmed"):
+            if os.path.exists(panda_img_path):
+                st.image(panda_img_path, caption=t("donate_panda_caption", lang), use_container_width=True)
+            st.success(f"{t('donate_thanks_title', lang)}\n\n{t('donate_thanks_desc', lang)}")
+            if st.button(t("donate_btn_show_qr", lang), use_container_width=True):
+                st.session_state["donated_confirmed"] = False
+                st.rerun()
+        else:
+            if os.path.exists(qr_img_path):
+                st.image(qr_img_path, caption=t("donate_qr_caption", lang), use_container_width=True)
+            
+            st.markdown(f"""
+            - {t('donate_info_owner', lang)}
+            - {t('donate_info_method', lang)}
+            """)
+            
+            if st.button(t("donate_btn_confirm", lang), type="primary", use_container_width=True):
+                st.session_state["donated_confirmed"] = True
+                st.balloons()
+                st.rerun()
 
         st.markdown("---")
         st.markdown("---")
