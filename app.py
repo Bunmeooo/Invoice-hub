@@ -1547,7 +1547,7 @@ if plan == "pro":
 # =========================================================================
 if plan == "pro":
     with tab6_risk:
-        st.subheader("🚨 Rà Soát Rủi Ro Thuế & Cảnh Báo Gian Lận Hóa Đơn (Tax Compliance Engine)")
+        st.subheader("🚨 Rà Soát & Cảnh Báo Rủi Ro (Risk Compliance Engine)")
         all_invs = db.get_all_invoices()
         if not all_invs and st.session_state.get("preview_data"):
             all_invs = st.session_state["preview_data"]
@@ -1653,15 +1653,19 @@ with b_right:
         panda_img_path = os.path.join(assets_dir, "thank_you_panda.png")
         
         if st.session_state.get("donated_confirmed"):
-            if os.path.exists(panda_img_path):
-                st.image(panda_img_path, caption=t("donate_panda_caption", lang), use_container_width=True)
+            col_p1, col_p2, col_p3 = st.columns([1, 2, 1])
+            with col_p2:
+                if os.path.exists(panda_img_path):
+                    st.image(panda_img_path, caption=t("donate_panda_caption", lang), width=180)
             st.success(f"{t('donate_thanks_title', lang)}\n\n{t('donate_thanks_desc', lang)}")
             if st.button(t("donate_btn_show_qr", lang), use_container_width=True):
                 st.session_state["donated_confirmed"] = False
                 st.rerun()
         else:
-            if os.path.exists(qr_img_path):
-                st.image(qr_img_path, caption=t("donate_qr_caption", lang), use_container_width=True)
+            col_q1, col_q2, col_q3 = st.columns([1, 1.8, 1])
+            with col_q2:
+                if os.path.exists(qr_img_path):
+                    st.image(qr_img_path, caption=t("donate_qr_caption", lang), width=160)
             
             st.markdown(f"""
             - {t('donate_info_owner', lang)}

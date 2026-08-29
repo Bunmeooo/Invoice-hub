@@ -101,7 +101,7 @@ TRANSLATIONS = {
         "tab3": "💾 3. Xuất Báo Cáo Excel",
         "tab4_bi": "📈 4. Biểu Đồ Phân Tích",
         "tab5_ap": "💳 5. Đối Soát Công Nợ",
-        "tab6_risk": "🚨 6. Cảnh Báo Rủi Ro Thuế",
+        "tab6_risk": "🚨 6. Cảnh Báo Rủi Ro",
         
         # Tab 1: Upload
         "upload_header": "Nạp tệp Hóa đơn Điện tử (Hỗ trợ PDF, XML, ZIP, RAR)",
@@ -271,7 +271,7 @@ TRANSLATIONS = {
         "tab3": "💾 3. Export Excel Report",
         "tab4_bi": "📈 4. Visual Analytics",
         "tab5_ap": "💳 5. Accounts Payable Reconciliation",
-        "tab6_risk": "🚨 6. Tax Risk & Fraud Alerts",
+        "tab6_risk": "🚨 6. Risk Alerts",
         
         # Tab 1: Upload
         "upload_header": "Upload E-Invoice Files (Supports PDF, XML, ZIP, RAR)",
@@ -441,7 +441,7 @@ TRANSLATIONS = {
         "tab3": "💾 3. 导出标准Excel报表",
         "tab4_bi": "📈 4. 数据可视化分析",
         "tab5_ap": "💳 5. 应付账款对账核算",
-        "tab6_risk": "🚨 6. 税务风控与欺诈预警",
+        "tab6_risk": "🚨 6. 风险预警",
         
         # Tab 1: Upload
         "upload_header": "上传电子发票文件（支持 PDF、XML、ZIP、RAR 格式）",
