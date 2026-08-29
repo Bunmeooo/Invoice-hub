@@ -1,0 +1,19 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.class
+
+# Local environment & tools
+.venv/
+env/
+venv/
+cloudflared.exe
+*.bat
+
+# Temporary & user runtime data (Preserve Privacy)
+user_data/
+temp_extracted/
+
+# OS files
+.DS_Store
+Thumbs.db

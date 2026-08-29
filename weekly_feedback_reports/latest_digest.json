@@ -1,0 +1,39 @@
+{
+  "total_count": 4,
+  "avg_rating": 3.75,
+  "category_counts": {
+    "✨ Đề xuất tính năng mới": 2,
+    "💡 Góp ý khác": 2
+  },
+  "timestamp": "27/08/2026 11:01",
+  "feedbacks": [
+    {
+      "user_id": "Ketoan_01",
+      "rating": 5,
+      "category": "✨ Đề xuất tính năng mới",
+      "comment": "Bổ sung tính năng upload vào hệ thống phần phềm đi",
+      "created_at": "2026-08-27 03:58:06"
+    },
+    {
+      "user_id": "Ketoan_01",
+      "rating": 4,
+      "category": "💡 Góp ý khác",
+      "comment": "Khá là ok, cứ tuềnh toàng zi",
+      "created_at": "2026-08-27 02:53:02"
+    },
+    {
+      "user_id": "Ketoan_01",
+      "rating": 1,
+      "category": "💡 Góp ý khác",
+      "comment": "Bạn làm như cẹc",
+      "created_at": "2026-08-27 02:52:05"
+    },
+    {
+      "user_id": "test_user_quota",
+      "rating": 5,
+      "category": "✨ Đề xuất tính năng mới",
+      "comment": "Hệ thống bóc tách rất nhanh và chính xác!",
+      "created_at": "2026-08-27 02:40:32"
+    }
+  ]
+}
