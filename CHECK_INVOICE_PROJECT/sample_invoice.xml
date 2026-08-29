@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<HDon>
+    <DLHDon>
+        <TTChung>
+            <PBan>2.0.0</PBan>
+            <THDon>Hóa đơn giá trị gia tăng</THDon>
+            <KHMHDon>1</KHMHDon>
+            <KHHDon>C24TYO</KHHDon>
+            <SHDon>00000088</SHDon>
+            <NLap>2024-03-15</NLap>
+            <DVTTe>VND</DVTTe>
+            <TGia>1.0</TGia>
+            <HTTToan>TM/CK</HTTToan>
+        </TTChung>
+        <NDHDon>
+            <NBan>
+                <Ten>CÔNG TY TNHH TOYO SOLAR (VIỆT NAM)</Ten>
+                <MST>2601084657</MST>
+                <DChi>KCN Phú Hà, Xã Hà Lộc, Thị xã Phú Thọ, Tỉnh Phú Thọ, Việt Nam</DChi>
+                <SDThoai>02103888999</SDThoai>
+            </NBan>
+            <NMua>
+                <Ten>CÔNG TY CỔ PHẦN VIETNAM SUNERGY</Ten>
+                <MST>2400898989</MST>
+                <DChi>KCN Đình Trám, Tỉnh Bắc Giang, Việt Nam</DChi>
+            </NMua>
+            <DSHangHoa>
+                <HHDVu>
+                    <STT>1</STT>
+                    <THHDVu>Tấm tế bào quang điện Solar Cell 182x182mm Model A1</THHDVu>
+                    <DVTinh>Chiếc</DVTinh>
+                    <SLuong>50000</SLuong>
+                    <DGia>32000</DGia>
+                    <ThTien>1600000000</ThTien>
+                    <TSuat>10%</TSuat>
+                    <TThue>160000000</TThue>
+                </HHDVu>
+                <HHDVu>
+                    <STT>2</STT>
+                    <THHDVu>Khung nhôm định hình lắp ráp Module Solar</THHDVu>
+                    <DVTinh>Bộ</DVTinh>
+                    <SLuong>2000</SLuong>
+                    <DGia>150000</DGia>
+                    <ThTien>300000000</ThTien>
+                    <TSuat>10%</TSuat>
+                    <TThue>30000000</TThue>
+                </HHDVu>
+            </DSHangHoa>
+            <TToan>
+                <TgTCThue>1900000000</TgTCThue>
+                <TgTThue>190000000</TgTThue>
+                <TgTTToan>2090000000</TgTTToan>
+            </TToan>
+        </NDHDon>
+    </DLHDon>
+</HDon>
