@@ -829,21 +829,12 @@ if st.session_state.get("logged_in_user") is None:
                         
             st.markdown("---")
             st.caption(t("quick_trial_caption", lang))
-            c_d1, c_d2 = st.columns(2)
-            with c_d1:
-                if st.button(t("btn_demo_user", lang), use_container_width=True, help="Vào ngay tài khoản mẫu ketoan_demo"):
-                    success, msg, udata = login_user("ketoan_demo", "123456")
-                    if success:
-                        st.session_state["logged_in_user"] = udata
-                        st.session_state["user_id"] = "ketoan_demo"
-                        st.rerun()
-            with c_d2:
-                if st.button(t("btn_admin_user", lang), use_container_width=True, help="Đăng nhập tài khoản Quản trị viên"):
-                    success, msg, udata = login_user("hznguyen1997", "Anthumatmeo020922")
-                    if success:
-                        st.session_state["logged_in_user"] = udata
-                        st.session_state["user_id"] = "hznguyen1997"
-                        st.rerun()
+            if st.button(t("btn_demo_user", lang), use_container_width=True, help="Trải nghiệm nhanh với tài khoản dùng thử (không có quyền quản trị)"):
+                success, msg, udata = login_user("ketoan_demo", "123456")
+                if success:
+                    st.session_state["logged_in_user"] = udata
+                    st.session_state["user_id"] = "ketoan_demo"
+                    st.rerun()
 
         with tab_reg:
             st.markdown(f"##### {t('signup_header', lang)}")
