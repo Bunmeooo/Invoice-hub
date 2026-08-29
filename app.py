@@ -1650,13 +1650,15 @@ with b_right:
         
         assets_dir = os.path.join(os.path.dirname(__file__), "assets")
         qr_img_path = os.path.join(assets_dir, "donate_qr.png")
+        panda_gif_path = os.path.join(assets_dir, "thank_you_panda.gif")
         panda_img_path = os.path.join(assets_dir, "thank_you_panda.png")
         
         if st.session_state.get("donated_confirmed"):
             col_p1, col_p2, col_p3 = st.columns([1, 2, 1])
             with col_p2:
-                if os.path.exists(panda_img_path):
-                    st.image(panda_img_path, caption=t("donate_panda_caption", lang), width=180)
+                active_panda = panda_gif_path if os.path.exists(panda_gif_path) else panda_img_path
+                if os.path.exists(active_panda):
+                    st.image(active_panda, caption=t("donate_panda_caption", lang), width=180)
             st.success(f"{t('donate_thanks_title', lang)}\n\n{t('donate_thanks_desc', lang)}")
             if st.button(t("donate_btn_show_qr", lang), use_container_width=True):
                 st.session_state["donated_confirmed"] = False
