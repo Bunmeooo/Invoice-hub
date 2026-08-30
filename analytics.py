@@ -28,10 +28,11 @@ def get_supplier_chart(invoices: List[Dict[str, Any]], lang: str = "vi"):
     title_map = {
         "vi": "🏆 Top 10 Nhà Cung Cấp Chi Phí Lớn Nhất (VND)",
         "en": "🏆 Top 10 Suppliers by Total Spend (VND)",
-        "zh": "🏆 采购金额前10大供应商排名 (VND)"
+        "zh": "🏆 采购金额前10大供应商排名 (VND)",
+        "ko": "🏆 지출 상위 10대 공급업체 순위 (VND)"
     }
-    x_map = {"vi": "Nhà Cung Cấp", "en": "Supplier", "zh": "供应商"}
-    y_map = {"vi": "Tổng tiền (VND)", "en": "Total Amount (VND)", "zh": "含税总金额 (VND)"}
+    x_map = {"vi": "Nhà Cung Cấp", "en": "Supplier", "zh": "供应商", "ko": "공급업체"}
+    y_map = {"vi": "Tổng tiền (VND)", "en": "Total Amount (VND)", "zh": "含税总金额 (VND)", "ko": "총금액 (VND)"}
     
     fig = px.bar(
         sup_summary,
@@ -91,26 +92,27 @@ def get_monthly_trend_chart(invoices: List[Dict[str, Any]], lang: str = "vi"):
     title_map = {
         "vi": "📈 Biến Động Chi Phí & Thuế GTGT Theo Tháng",
         "en": "📈 Monthly Spend & VAT Trend Analysis",
-        "zh": "📈 月度采购支出与增值税进项趋势分析"
+        "zh": "📈 月度采购支出与增值税进项趋势分析",
+        "ko": "📈 월별 지출 및 부가세 변동 추이 분석"
     }
     
     fig = go.Figure()
     fig.add_trace(go.Bar(
         x=trend["thang"],
         y=trend["tien_chua_thue"],
-        name="Chưa thuế" if lang == "vi" else ("Pre-tax" if lang == "en" else "不含税金额"),
+        name="Chưa thuế" if lang == "vi" else ("Pre-tax" if lang == "en" else ("不含税金额" if lang == "zh" else "공급가액")),
         marker_color="#1F4E78"
     ))
     fig.add_trace(go.Bar(
         x=trend["thang"],
         y=trend["tien_thue"],
-        name="Thuế GTGT" if lang == "vi" else ("VAT" if lang == "en" else "增值税额"),
+        name="Thuế GTGT" if lang == "vi" else ("VAT" if lang == "en" else ("增值税额" if lang == "zh" else "부가세")),
         marker_color="#2CA02C"
     ))
     fig.add_trace(go.Scatter(
         x=trend["thang"],
         y=trend["tong_tien"],
-        name="Tổng cộng" if lang == "vi" else ("Total" if lang == "en" else "含税总额"),
+        name="Tổng cộng" if lang == "vi" else ("Total" if lang == "en" else ("含税总额" if lang == "zh" else "총합계")),
         mode="lines+markers+text",
         text=trend["tong_tien"].apply(lambda v: f"{v:,.0f}"),
         textposition="top center",
@@ -151,10 +153,10 @@ def get_tax_distribution_chart(invoices: List[Dict[str, Any]], lang: str = "vi")
         vat = float(row.get("tien_thue", 0.0))
         pre = float(row.get("tien_chua_thue", 0.0))
         if vat == 0:
-            return "0% / Không chịu thuế" if lang == "vi" else ("0% / Exempt" if lang == "en" else "0% / 免税")
+            return "0% / Không chịu thuế" if lang == "vi" else ("0% / Exempt" if lang == "en" else ("0% / 免税" if lang == "zh" else "0% / 면세"))
         rate = round((vat / pre) * 100) if pre > 0 else 10
         if rate in [7, 8]:
-            return "8% (Ưu đãi)" if lang == "vi" else ("8% (Reduced)" if lang == "en" else "8% (优惠税率)")
+            return "8% (Ưu đãi)" if lang == "vi" else ("8% (Reduced)" if lang == "en" else ("8% (优惠税率)" if lang == "zh" else "8% (경감세율)"))
         return f"{rate}%"
         
     df["NhomThue"] = df.apply(classify_tax, axis=1)
@@ -163,7 +165,8 @@ def get_tax_distribution_chart(invoices: List[Dict[str, Any]], lang: str = "vi")
     title_map = {
         "vi": "🍩 Tỷ Trọng Cơ Cấu Thuế Suất GTGT",
         "en": "🍩 VAT Rate Breakdown Distribution",
-        "zh": "🍩 增值税税率结构占比"
+        "zh": "🍩 增值税税率结构占比",
+        "ko": "🍩 부가가치세율별 구성 비중"
     }
     
     fig = px.pie(

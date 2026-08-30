@@ -28,16 +28,20 @@ st.set_page_config(
 
 # ================= QUẢN TRỊ TRẠNG THÁI (SESSION STATE) & CALLBACKS =================
 def on_lang_change():
-    if "hdr_sel_lang" in st.session_state and st.session_state["hdr_sel_lang"]:
-        st.session_state["lang"] = st.session_state["hdr_sel_lang"]
-    elif "lang_login" in st.session_state and st.session_state["lang_login"]:
-        st.session_state["lang"] = st.session_state["lang_login"]
+    if st.session_state.get("logged_in_user") is None:
+        if "lang_login" in st.session_state and st.session_state["lang_login"]:
+            st.session_state["lang"] = st.session_state["lang_login"]
+    else:
+        if "hdr_sel_lang" in st.session_state and st.session_state["hdr_sel_lang"]:
+            st.session_state["lang"] = st.session_state["hdr_sel_lang"]
 
 def on_theme_change():
-    if "hdr_sel_theme" in st.session_state and st.session_state["hdr_sel_theme"]:
-        st.session_state["theme"] = st.session_state["hdr_sel_theme"]
-    elif "th_login" in st.session_state and st.session_state["th_login"]:
-        st.session_state["theme"] = st.session_state["th_login"]
+    if st.session_state.get("logged_in_user") is None:
+        if "th_login" in st.session_state and st.session_state["th_login"]:
+            st.session_state["theme"] = st.session_state["th_login"]
+    else:
+        if "hdr_sel_theme" in st.session_state and st.session_state["hdr_sel_theme"]:
+            st.session_state["theme"] = st.session_state["hdr_sel_theme"]
 
 if "lang" not in st.session_state:
     st.session_state["lang"] = "vi"
@@ -745,11 +749,17 @@ if st.session_state.get("logged_in_user") is None:
     with auth_h2:
         c_l, c_t = st.columns(2)
         with c_l:
+            lang_opts_login = {
+                "vi": "🇻🇳 " + t("lang_opt_vi", lang),
+                "en": "🇬🇧 " + t("lang_opt_en", lang),
+                "zh": "🇨🇳 " + t("lang_opt_zh", lang),
+                "ko": "🇰🇷 " + t("lang_opt_ko", lang)
+            }
             sel_lang_login = st.selectbox(
                 t("lang_label", lang),
-                ["vi", "en", "zh"],
-                format_func=lambda x: "🇻🇳 " + t("lang_opt_vi", lang) if x=="vi" else ("🇬🇧 " + t("lang_opt_en", lang) if x=="en" else "🇨🇳 " + t("lang_opt_zh", lang)),
-                index=["vi","en","zh"].index(lang) if lang in ["vi","en","zh"] else 0,
+                options=list(lang_opts_login.keys()),
+                format_func=lambda x: lang_opts_login[x],
+                index=list(lang_opts_login.keys()).index(lang) if lang in lang_opts_login else 0,
                 key="lang_login",
                 on_change=on_lang_change
             )
@@ -806,7 +816,7 @@ if st.session_state.get("logged_in_user") is None:
         tab_login, tab_reg, tab_forgot = st.tabs([
             t("tab_signin", lang),
             t("tab_signup", lang),
-            "🔄 " + ("Quên Mật Khẩu" if lang=="vi" else ("Forgot Password" if lang=="en" else "找回密码"))
+            t("tab_forgot", lang)
         ])
         
         with tab_login:
@@ -816,7 +826,7 @@ if st.session_state.get("logged_in_user") is None:
             
             if st.button(t("btn_login", lang), type="primary", use_container_width=True):
                 if not log_user or not log_pass:
-                    st.error("Vui lòng nhập đầy đủ Tên đăng nhập và Mật khẩu!" if lang=="vi" else ("Please enter both username and password!" if lang=="en" else "请输入用户名和密码！"))
+                    st.error("Vui lòng nhập đầy đủ Tên đăng nhập và Mật khẩu!" if lang=="vi" else ("Please enter both username and password!" if lang=="en" else ("请输入用户名和密码！" if lang=="zh" else "아이디와 비밀번호를 모두 입력해 주세요!")))
                 else:
                     success, msg, udata = login_user(log_user, log_pass)
                     if success:
@@ -848,7 +858,7 @@ if st.session_state.get("logged_in_user") is None:
             
             if st.button(t("btn_register_submit", lang), type="primary", use_container_width=True):
                 if not reg_u or not reg_p or not reg_fn:
-                    st.error("Vui lòng điền Tên đăng nhập, Mật khẩu và Họ tên!" if lang=="vi" else ("Please fill Username, Password, and Full Name!" if lang=="en" else "请填写用户名、密码和姓名！"))
+                    st.error("Vui lòng điền Tên đăng nhập, Mật khẩu và Họ tên!" if lang=="vi" else ("Please fill Username, Password, and Full Name!" if lang=="en" else ("请填写用户名、密码和姓名！" if lang=="zh" else "아이디, 비밀번호 및 성명을 모두 입력해 주세요!")))
                 else:
                     success, msg, udata = register_user(
                         username=reg_u,
@@ -885,8 +895,8 @@ if st.session_state.get("logged_in_user") is None:
                         st.error(rst_msg)
             
             st.markdown("---")
-            st.caption("📞 " + ("Nếu bạn quên cả SĐT/Email đăng ký, vui lòng liên hệ:" if lang=="vi" else ("If you forgot both Phone/Email, please contact:" if lang=="en" else "若遗忘注册信息，请联系：")))
-            st.markdown("• **" + ("Quản trị viên:" if lang=="vi" else ("Administrator:" if lang=="en" else "系统管理员：")) + "** `Nguyễn Hoàng Giang`  \n• **" + ("SĐT / Zalo:" if lang=="vi" else ("Phone / Zalo:" if lang=="en" else "电话 / Zalo：")) + "** `09727 858 67`  \n• **Email:** `hznguyen1993@gmail.com`")
+            st.caption("📞 " + ("Nếu bạn quên cả SĐT/Email đăng ký, vui lòng liên hệ:" if lang=="vi" else ("If you forgot both Phone/Email, please contact:" if lang=="en" else ("若遗忘注册信息，请联系：" if lang=="zh" else "등록된 연락처/이메일을 분실한 경우 관리자에게 문의하세요:"))))
+            st.markdown("• **" + ("Quản trị viên:" if lang=="vi" else ("Administrator:" if lang=="en" else ("系统管理员：" if lang=="zh" else "시스템 관리자:"))) + "** `Nguyễn Hoàng Giang`  \n• **" + ("SĐT / Zalo:" if lang=="vi" else ("Phone / Zalo:" if lang=="en" else ("电话 / Zalo：" if lang=="zh" else "전화 / Zalo:"))) + "** `09727 858 67`  \n• **Email:** `hznguyen1993@gmail.com`")
     st.stop()
 
 # =========================================================================
@@ -921,7 +931,8 @@ with head_right:
         lang_map = {
             "vi": "🇻🇳 " + t("lang_opt_vi", lang),
             "en": "🇬🇧 " + t("lang_opt_en", lang),
-            "zh": "🇨🇳 " + t("lang_opt_zh", lang)
+            "zh": "🇨🇳 " + t("lang_opt_zh", lang),
+            "ko": "🇰🇷 " + t("lang_opt_ko", lang)
         }
         sel_lang = st.selectbox(
             t("lang_label", lang),
@@ -1078,7 +1089,7 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown(f"### {t('clean_data_title', lang)}")
-    if st.button(f"🧹 " + ("LÀM SẠCH HÓA ĐƠN ĐÃ NẠP" if lang=="vi" else ("CLEAR INVOICE DATA" if lang=="en" else "清空已上传发票")), use_container_width=True, help="Chỉ xóa dữ liệu hóa đơn đã tải lên, vẫn giữ tài khoản"):
+    if st.button(f"🧹 " + ("LÀM SẠCH HÓA ĐƠN ĐÃ NẠP" if lang=="vi" else ("CLEAR INVOICE DATA" if lang=="en" else ("清空已上传发票" if lang=="zh" else "업로드된 계산서 데이터 초기화"))), use_container_width=True, help="Chỉ xóa dữ liệu hóa đơn đã tải lên, vẫn giữ tài khoản"):
         db.clear_all()
         if "preview_data" in st.session_state:
             del st.session_state["preview_data"]
@@ -1086,9 +1097,9 @@ with st.sidebar:
         st.rerun()
         
     if current_user != "hznguyen1997":
-        with st.popover("🗑️ " + ("XÓA VĨNH VIỄN TÀI KHOẢN NÀY" if lang=="vi" else ("DELETE THIS ACCOUNT" if lang=="en" else "彻底注销此账号")), use_container_width=True):
-            st.warning("⚠️ " + ("Hành động này sẽ xóa vĩnh viễn tài khoản và toàn bộ dữ liệu kế toán liên quan khỏi hệ thống!" if lang=="vi" else ("This will permanently delete this account and all associated invoice data!" if lang=="en" else "此操作将永久注销该账号并删除所有相关发票数据！")))
-            if st.button("🔥 " + ("Xác nhận Xóa Vĩnh Viễn" if lang=="vi" else ("Confirm Permanent Delete" if lang=="en" else "确认彻底注销")), type="primary", use_container_width=True):
+        with st.popover("🗑️ " + ("XÓA VĨNH VIỄN TÀI KHOẢN NÀY" if lang=="vi" else ("DELETE THIS ACCOUNT" if lang=="en" else ("彻底注销此账号" if lang=="zh" else "계정 영구 삭제"))), use_container_width=True):
+            st.warning("⚠️ " + ("Hành động này sẽ xóa vĩnh viễn tài khoản và toàn bộ dữ liệu kế toán liên quan khỏi hệ thống!" if lang=="vi" else ("This will permanently delete this account and all associated invoice data!" if lang=="en" else ("此操作将永久注销该账号并删除所有相关发票数据！" if lang=="zh" else "이 작업은 계정 및 관련된 모든 계산서 데이터를 영구적으로 삭제합니다!"))))
+            if st.button("🔥 " + ("Xác nhận Xóa Vĩnh Viễn" if lang=="vi" else ("Confirm Permanent Delete" if lang=="en" else ("确认彻底注销" if lang=="zh" else "영구 삭제 확인"))), type="primary", use_container_width=True):
                 ok_del, msg_del = delete_my_account(current_user)
                 if ok_del:
                     st.session_state["logged_in_user"] = None
@@ -1394,13 +1405,24 @@ with tab3:
                 "vi": "Tiếng Việt",
                 "en": "English",
                 "zh": "中文",
-                "bilingual_zh": "Song ngữ Việt - Trung (Bilingual VI/ZH)"
+                "ko": "한국어 (Korean)",
+                "bilingual_zh": "Song ngữ Việt - Trung (Bilingual VI/ZH)",
+                "bilingual_ko": "Song ngữ Việt - Hàn (Bilingual VI/KO)"
             }
+            if lang == "zh":
+                def_export = "bilingual_zh"
+            elif lang == "ko":
+                def_export = "bilingual_ko"
+            elif lang in excel_lang_opts:
+                def_export = lang
+            else:
+                def_export = "vi"
+                
             export_lang = st.selectbox(
                 t("excel_lang_select", lang),
                 options=list(excel_lang_opts.keys()),
                 format_func=lambda k: excel_lang_opts[k],
-                index=list(excel_lang_opts.keys()).index("bilingual_zh" if lang == "zh" else lang)
+                index=list(excel_lang_opts.keys()).index(def_export)
             )
             
             excel_bytes = InvoiceExporter.export_comprehensive_excel(all_invs, db, lang=export_lang)

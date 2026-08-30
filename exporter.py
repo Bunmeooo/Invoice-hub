@@ -56,6 +56,22 @@ class InvoiceExporter:
                 "Tiền chưa thuế / 不含税额 (VND)", "Tiền thuế / 增值税额 (VND)", "Tổng thanh toán / 价税合计 (VND)",
                 "Chữ ký số / 电子签名", "Mã CQT / 税局代码", "Website / 查验网址", "Mã tra cứu / 查验码",
                 "Đánh giá / 合规审核", "Ghi chú / 备注"
+            ],
+            "ko": [
+                "연번", "양식 기호", "계산서 기호", "계산서 번호", "발행일자",
+                "공급업체명 (매도자)", "공급자 사업자등록번호", "공급자 주소",
+                "구매자 상호 (법인명)", "구매자 사업자등록번호",
+                "공급가액 (VND)", "부가가치세 (VND)", "총결제금액 (VND)",
+                "전자서명 여부", "세무국 코드 (MCCQT)", "조회 웹사이트", "비밀번호 조회코드",
+                "법적 적격성 평가 (TT 91/2026)", "비고"
+            ],
+            "bilingual_ko": [
+                "STT / 연번", "Ký hiệu mẫu / 양식", "Ký hiệu HĐ / 기호", "Số HĐ / 계산서번호", "Ngày lập / 발행일자",
+                "Tên NCC / 공급업체명", "MST NCC / 사업자번호", "Địa chỉ / 공급자주소",
+                "Tên Đơn vị mua / 구매자", "MST Mua / 구매자사업자번호",
+                "Tiền chưa thuế / 공급가액 (VND)", "Tiền thuế / 부가세 (VND)", "Tổng thanh toán / 총금액 (VND)",
+                "Chữ ký số / 전자서명", "Mã CQT / 세무국코드", "Website / 조회사이트", "Mã tra cứu / 조회코드",
+                "Đánh giá / 적격성평가", "Ghi chú / 비고"
             ]
         }
         headers_ws1 = headers_ws1_map.get(lang, headers_ws1_map["vi"])
@@ -64,7 +80,9 @@ class InvoiceExporter:
             "vi": ("BẢNG KÊ TỔNG HỢP HÓA ĐƠN ĐIỆN TỬ", "Theo quy chuẩn Thông tư số 91/2026/TT-BTC & Nghị định số 123/2020/NĐ-CP", "Bảng_Kê_Tổng_Hợp"),
             "en": ("COMPREHENSIVE E-INVOICE SUMMARY LEDGER", "Conforming to Circular 91/2026/TT-BTC & Decree 123/2020/ND-CP", "Invoice_Summary"),
             "zh": ("电子发票汇总统计总表", "符合越南财政部第91/2026/TT-BTC号通告与第123/2020/ND-CP号法令合规标准", "发票总表_汇总"),
-            "bilingual_zh": ("BẢNG KÊ TỔNG HỢP HÓA ĐƠN / 电子发票汇总表", "Quy chuẩn Thông tư 91/2026/TT-BTC & Nghị định 123 / 越南增值税发票合规标准", "Bang_Ke_Tong_Hop")
+            "bilingual_zh": ("BẢNG KÊ TỔNG HỢP HÓA ĐƠN / 电子发票汇总表", "Quy chuẩn Thông tư 91/2026/TT-BTC & Nghị định 123 / 越南增值税发票合规标准", "Bang_Ke_Tong_Hop"),
+            "ko": ("전자세금계산서 총괄 집계표", "베트남 재무부 통로서 91/2026/TT-BTC 및 시행령 123/2020/ND-CP 표준", "계산서_총괄_집계표"),
+            "bilingual_ko": ("BẢNG KÊ TỔNG HỢP HÓA ĐƠN / 전자계산서 총괄표", "Thông tư 91/2026/TT-BTC & Nghị định 123 / 베트남 전자계산서 회계 표준", "Bang_Ke_Tong_Hop")
         }
         title_main, title_sub, sheet1_name = main_titles.get(lang, main_titles["vi"])
         
@@ -272,6 +290,14 @@ class InvoiceExporter:
             "bilingual_zh": [
                 "STT / 序号", "Tên Hàng Hóa / 货物劳务名称", "MST / 税号", "Số HĐ / 发票号码", "Ký hiệu / 代码", "Ngày lập / 日期",
                 "ĐVT / 单位", "Số lượng / 数量", "Đơn giá / 单价 (VND)", "Thành tiền / 金额 (VND)", "Thuế suất / 税率", "Tiền thuế / 税额 (VND)", "Tổng cộng / 价税合计 (VND)"
+            ],
+            "ko": [
+                "연번", "공급업체명 / 품목 및 용역명", "사업자등록번호", "계산서번호", "기호", "발행일자",
+                "단위", "수량", "단가 (VND)", "공급가액 (VND)", "세율", "부가가치세 (VND)", "총결제금액 (VND)"
+            ],
+            "bilingual_ko": [
+                "STT / 연번", "Tên Hàng Hóa / 품목명", "MST / 사업자번호", "Số HĐ / 계산서번호", "Ký hiệu / 기호", "Ngày lập / 발행일",
+                "ĐVT / 단위", "Số lượng / 수량", "Đơn giá / 단가 (VND)", "Thành tiền / 공급가액 (VND)", "Thuế suất / 세율", "Tiền thuế / 부가세 (VND)", "Tổng cộng / 총금액 (VND)"
             ]
         }
         headers_ws2 = headers_ws2_map.get(lang, headers_ws2_map["vi"])
@@ -280,7 +306,9 @@ class InvoiceExporter:
             "vi": ("BẢNG KÊ CHI TIẾT HÀNG HÓA - DỊCH VỤ THEO NHÀ CUNG CẤP", "Phân rã chi tiết từng dòng mặt hàng, đơn giá, thuế suất theo từng hóa đơn và NCC", "Chi_Tiết_Theo_Nhà_Cung_Cấp"),
             "en": ("DETAILED GOODS & SERVICES BREAKDOWN BY SUPPLIER", "Itemized breakdown of unit prices, VAT rates and line totals by supplier", "Supplier_Item_Breakdown"),
             "zh": ("供应商货物与服务采购明细分类总表", "按发票与供应商详细拆分各项商品规格、单价、税率与税额", "供应商采购明细表"),
-            "bilingual_zh": ("CHI TIẾT THEO NHÀ CUNG CẤP / 供应商明细表", "Phân rã chi tiết hàng hóa theo NCC / 供应商采购明细分录", "Chi_Tiet_NCC")
+            "bilingual_zh": ("CHI TIẾT THEO NHÀ CUNG CẤP / 供应商明细表", "Phân rã chi tiết hàng hóa theo NCC / 供应商采购明细分录", "Chi_Tiet_NCC"),
+            "ko": ("공급업체별 품목 및 용역 매입 명세서", "계산서 및 공급업체별 단가, 세율, 세액 상세 분할 명세", "공급업체별_매입명세표"),
+            "bilingual_ko": ("CHI TIẾT THEO NHÀ CUNG CẤP / 공급업체별 명세", "Phân rã chi tiết hàng hóa theo NCC / 공급업체별 매입명세", "Chi_Tiet_NCC")
         }
         title2_main, title2_sub, sheet2_name = sub_titles_s2.get(lang, sub_titles_s2["vi"])
 
