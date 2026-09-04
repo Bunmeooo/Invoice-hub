@@ -1132,148 +1132,396 @@ if plan == "pro":
     tab4_bi, tab5_ap, tab6_risk = all_tabs[3], all_tabs[4], all_tabs[5]
 
 # =========================================================================
-# TAB 1: NẠP HÓA ĐƠN & PREVIEW
+# TAB 1: NẠP HÓA ĐƠN & ĐỒNG BỘ TỔNG CỤC THUẾ (GDT)
 # =========================================================================
 with tab1:
-    st.subheader(t("upload_header", lang))
+    subtab_local, subtab_gdt = st.tabs([
+        t("gdt_subtab_local", lang),
+        t("gdt_subtab_sync", lang)
+    ])
     
-    uploaded_files = st.file_uploader(
-        t("upload_drag_drop", lang),
-        type=["pdf", "xml", "zip", "rar"],
-        accept_multiple_files=True
-    )
+    with subtab_local:
+        st.subheader(t("upload_header", lang))
+        
+        uploaded_files = st.file_uploader(
+            t("upload_drag_drop", lang),
+            type=["pdf", "xml", "zip", "rar"],
+            accept_multiple_files=True
+        )
 
-    if uploaded_files:
-        if st.button(t("btn_start_parse", lang), type="primary"):
-            # Phân loại số lượng tệp standard (PDF, XML) và archive (ZIP, RAR)
-            std_files = [f for f in uploaded_files if os.path.splitext(f.name)[1].lower() in [".pdf", ".xml"]]
-            arc_files = [f for f in uploaded_files if os.path.splitext(f.name)[1].lower() in [".zip", ".rar", ".7z", ".tar"]]
-            
-            q_res = db.check_fine_grained_quota(
-                user_id=current_user,
-                plan_type=plan,
-                new_std_count=len(std_files),
-                new_arc_count=len(arc_files)
-            )
-            
-            if not q_res["allowed"]:
-                st.error(f"❌ {q_res['reason']}")
-                st.warning(f"💡 {t('quota_exceeded', lang)}")
-            else:
-                preview_results = []
-                prog_bar = st.progress(0.0)
-                status_txt = st.empty()
-                success_cnt = 0
-                err_cnt = 0
+        if uploaded_files:
+            if st.button(t("btn_start_parse", lang), type="primary"):
+                std_files = [f for f in uploaded_files if os.path.splitext(f.name)[1].lower() in [".pdf", ".xml"]]
+                arc_files = [f for f in uploaded_files if os.path.splitext(f.name)[1].lower() in [".zip", ".rar", ".7z", ".tar"]]
                 
-                for idx, up_file in enumerate(uploaded_files):
-                    fname = up_file.name
-                    fsize_kb = round(len(up_file.getvalue()) / 1024, 1)
-                    fbytes = up_file.read()
+                q_res = db.check_fine_grained_quota(
+                    user_id=current_user,
+                    plan_type=plan,
+                    new_std_count=len(std_files),
+                    new_arc_count=len(arc_files)
+                )
+                
+                if not q_res["allowed"]:
+                    st.error(f"❌ {q_res['reason']}")
+                    st.warning(f"💡 {t('quota_exceeded', lang)}")
+                else:
+                    preview_results = []
+                    prog_bar = st.progress(0.0)
+                    status_txt = st.empty()
+                    success_cnt = 0
+                    err_cnt = 0
                     
-                    status_txt.text(f"{t('parsing_progress', lang)} [{idx+1}/{len(uploaded_files)}]: {fname} ({fsize_kb} KB)...")
-                    ext = os.path.splitext(fname)[1].lower()
-                    
-                    parsed_invs = []
-                    if ext == ".xml":
-                        inv = InvoiceParser.parse_xml_content(fbytes, fname)
-                        if inv:
-                            parsed_invs.append(inv)
-                    elif ext == ".pdf":
-                        inv = InvoiceParser.parse_pdf_content(fbytes, fname)
-                        if inv:
-                            parsed_invs.append(inv)
-                    elif ext == ".zip":
-                        with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp:
-                            tmp.write(fbytes)
-                            tmp_path = tmp.name
-                        parsed_invs = InvoiceParser.parse_file(tmp_path)
-                        try:
-                            os.remove(tmp_path)
-                        except Exception:
-                            pass
-                    elif ext == ".rar":
-                        with tempfile.NamedTemporaryFile(delete=False, suffix=".rar") as tmp:
-                            tmp.write(fbytes)
-                            tmp_path = tmp.name
-                        parsed_invs = InvoiceParser.parse_file(tmp_path)
-                        try:
-                            os.remove(tmp_path)
-                        except Exception:
-                            pass
-                    
-                    if parsed_invs:
-                        for inv in parsed_invs:
-                            db.insert_invoice(inv, overwrite=True)
-                            success_cnt += 1
+                    for idx, up_file in enumerate(uploaded_files):
+                        fname = up_file.name
+                        fsize_kb = round(len(up_file.getvalue()) / 1024, 1)
+                        fbytes = up_file.read()
+                        
+                        status_txt.text(f"{t('parsing_progress', lang)} [{idx+1}/{len(uploaded_files)}]: {fname} ({fsize_kb} KB)...")
+                        ext = os.path.splitext(fname)[1].lower()
+                        
+                        parsed_invs = []
+                        if ext == ".xml":
+                            inv = InvoiceParser.parse_xml_content(fbytes, fname)
+                            if inv:
+                                parsed_invs.append(inv)
+                        elif ext == ".pdf":
+                            inv = InvoiceParser.parse_pdf_content(fbytes, fname)
+                            if inv:
+                                parsed_invs.append(inv)
+                        elif ext == ".zip":
+                            with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp:
+                                tmp.write(fbytes)
+                                tmp_path = tmp.name
+                            parsed_invs = InvoiceParser.parse_file(tmp_path)
+                            try:
+                                os.remove(tmp_path)
+                            except Exception:
+                                pass
+                        elif ext == ".rar":
+                            with tempfile.NamedTemporaryFile(delete=False, suffix=".rar") as tmp:
+                                tmp.write(fbytes)
+                                tmp_path = tmp.name
+                            parsed_invs = InvoiceParser.parse_file(tmp_path)
+                            try:
+                                os.remove(tmp_path)
+                            except Exception:
+                                pass
+                        
+                        if parsed_invs:
+                            for inv in parsed_invs:
+                                db.insert_invoice(inv, overwrite=True)
+                                success_cnt += 1
+                                preview_results.append({
+                                    "STT": len(preview_results) + 1,
+                                    "Tên tệp": fname,
+                                    "Định dạng": ext.upper().replace(".", ""),
+                                    "Số HĐ": inv.get("so_hd", ""),
+                                    "Ký hiệu": inv.get("kh_hd", ""),
+                                    "Ngày lập": inv.get("ngay_lap", ""),
+                                    "Nhà Cung Cấp": inv.get("ten_nban", ""),
+                                    "MST NCC": inv.get("mst_nban", ""),
+                                    "Chưa thuế (đ)": inv.get("tien_chua_thue", 0.0),
+                                    "Thuế GTGT (đ)": inv.get("tien_thue", 0.0),
+                                    "Tổng thanh toán (đ)": inv.get("tong_tien", 0.0),
+                                    "Chữ ký số": inv.get("sig_status", "Đã ký số"),
+                                    "Mã CQT": inv.get("ma_cqt", "Có mã CQT"),
+                                    "Đánh giá": inv.get("status_summary", "Hợp lệ")
+                                })
+                        else:
+                            err_cnt += 1
                             preview_results.append({
                                 "STT": len(preview_results) + 1,
                                 "Tên tệp": fname,
                                 "Định dạng": ext.upper().replace(".", ""),
-                                "Số HĐ": inv.get("so_hd", ""),
-                                "Ký hiệu": inv.get("kh_hd", ""),
-                                "Ngày lập": inv.get("ngay_lap", ""),
-                                "Nhà Cung Cấp": inv.get("ten_nban", ""),
-                                "MST NCC": inv.get("mst_nban", ""),
-                                "Chưa thuế (đ)": inv.get("tien_chua_thue", 0.0),
-                                "Thuế GTGT (đ)": inv.get("tien_thue", 0.0),
-                                "Tổng thanh toán (đ)": inv.get("tong_tien", 0.0),
-                                "Chữ ký số": inv.get("sig_status", "Đã ký số"),
-                                "Mã CQT": inv.get("ma_cqt", "Có mã CQT"),
-                                "Đánh giá": inv.get("status_summary", "Hợp lệ")
+                                "Số HĐ": "-",
+                                "Ký hiệu": "-",
+                                "Ngày lập": "-",
+                                "Nhà Cung Cấp": "-",
+                                "MST NCC": "-",
+                                "Chưa thuế (đ)": 0.0,
+                                "Thuế GTGT (đ)": 0.0,
+                                "Tổng thanh toán (đ)": 0.0,
+                                "Chữ ký số": "Chưa ký",
+                                "Mã CQT": "-",
+                                "Đánh giá": "Không có dữ liệu"
                             })
-                    else:
-                        err_cnt += 1
-                        preview_results.append({
-                            "STT": len(preview_results) + 1,
-                            "Tên tệp": fname,
-                            "Định dạng": ext.upper().replace(".", ""),
-                            "Số HĐ": "-",
-                            "Ký hiệu": "-",
-                            "Ngày lập": "-",
-                            "Nhà Cung Cấp": "-",
-                            "MST NCC": "-",
-                            "Chưa thuế (đ)": 0.0,
-                            "Thuế GTGT (đ)": 0.0,
-                            "Tổng thanh toán (đ)": 0.0,
-                            "Chữ ký số": "Chưa ký",
-                            "Mã CQT": "-",
-                            "Đánh giá": "Không có dữ liệu"
-                        })
-                    prog_bar.progress((idx + 1) / len(uploaded_files))
-                    
-                if std_files:
-                    db.increment_daily_usage(current_user, count=len(std_files))
-                if arc_files:
-                    db.increment_weekly_archive_usage(current_user, count=len(arc_files))
-                    
-                status_txt.empty()
-                st.session_state["preview_data"] = preview_results
-                st.success(f"{t('parse_success', lang)} **{success_cnt}** {t('stored_invoices', lang)}.")
+                        prog_bar.progress((idx + 1) / len(uploaded_files))
+                        
+                    if std_files:
+                        db.increment_daily_usage(current_user, count=len(std_files))
+                    if arc_files:
+                        db.increment_weekly_archive_usage(current_user, count=len(arc_files))
+                        
+                    status_txt.empty()
+                    st.session_state["preview_data"] = preview_results
+                    st.success(f"{t('parse_success', lang)} **{success_cnt}** {t('stored_invoices', lang)}.")
 
-    # ================= BẢNG PREVIEW TÁC VỤ =================
-    st.markdown(f"### {t('preview_header', lang)}")
-    
-    if st.session_state["preview_data"]:
-        df_prev = pd.DataFrame(st.session_state["preview_data"])
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric(t("metric_total_files", lang), f"{len(df_prev)}")
-        ok_count = len(df_prev[df_prev["Đánh giá"] == "Hợp lệ"])
-        c2.metric(t("metric_valid_invoices", lang), f"{ok_count} / {len(df_prev)}")
-        c3.metric(t("metric_total_amount", lang), f"{df_prev['Tổng thanh toán (đ)'].sum():,.0f} đ")
-        c4.metric(t("metric_total_vat", lang), f"{df_prev['Thuế GTGT (đ)'].sum():,.0f} đ")
+        # ================= BẢNG PREVIEW TÁC VỤ =================
+        st.markdown(f"### {t('preview_header', lang)}")
         
-        st.dataframe(
-            df_prev.style.format({
-                "Chưa thuế (đ)": "{:,.0f}",
-                "Thuế GTGT (đ)": "{:,.0f}",
-                "Tổng thanh toán (đ)": "{:,.0f}"
-            }),
-            use_container_width=True,
-            height=320
-        )
-    else:
-        st.info(t("preview_empty", lang))
+        if st.session_state["preview_data"]:
+            df_prev = pd.DataFrame(st.session_state["preview_data"])
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric(t("metric_total_files", lang), f"{len(df_prev)}")
+            ok_count = len(df_prev[df_prev["Đánh giá"] == "Hợp lệ"])
+            c2.metric(t("metric_valid_invoices", lang), f"{ok_count} / {len(df_prev)}")
+            c3.metric(t("metric_total_amount", lang), f"{df_prev['Tổng thanh toán (đ)'].sum():,.0f} đ")
+            c4.metric(t("metric_total_vat", lang), f"{df_prev['Thuế GTGT (đ)'].sum():,.0f} đ")
+            
+            st.dataframe(
+                df_prev.style.format({
+                    "Chưa thuế (đ)": "{:,.0f}",
+                    "Thuế GTGT (đ)": "{:,.0f}",
+                    "Tổng thanh toán (đ)": "{:,.0f}"
+                }),
+                use_container_width=True,
+                height=320
+            )
+        else:
+            st.info(t("preview_empty", lang))
+
+    # ================= SUB-TAB 2: ĐỒNG BỘ TỔNG CỤC THUẾ =================
+    with subtab_gdt:
+        gdt_head_l, gdt_head_r = st.columns([3, 1])
+        with gdt_head_l:
+            st.markdown(f"### 🏛️ {t('gdt_subtab_sync', lang)}")
+            st.caption("Cổng thông tin Hóa đơn điện tử Tổng cục Thuế: [https://hoadondientu.gdt.gov.vn](https://hoadondientu.gdt.gov.vn)")
+        with gdt_head_r:
+            if st.session_state.get("gdt_token"):
+                st.success(t("gdt_status_connected", lang))
+                if st.button("🔌 Ngắt kết nối TCT", key="btn_disc_gdt", use_container_width=True):
+                    st.session_state["gdt_token"] = ""
+                    st.session_state["gdt_invoices"] = []
+                    st.rerun()
+            else:
+                st.info(t("gdt_status_disconnected", lang))
+                
+        # 1. Khung Đăng nhập / Kết nối TCT nếu chưa có Token
+        if not st.session_state.get("gdt_token"):
+            auth_mode = st.radio(
+                "Phương thức kết nối Tổng Cục Thuế:",
+                [t("gdt_auth_mode_token", lang), t("gdt_auth_mode_creds", lang)],
+                horizontal=True,
+                key="gdt_auth_mode_choice"
+            )
+            
+            if auth_mode == t("gdt_auth_mode_token", lang):
+                st.markdown(f"**{t('gdt_token_label', lang)}**")
+                user_token_input = st.text_area(
+                    "Bearer Token",
+                    value=st.session_state.get("gdt_token", ""),
+                    placeholder="eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiIwMTAwMTA5MTA2IiwiZXhwIjoxNzg... (hoặc dán toàn bộ chuỗi Header Authorization)",
+                    height=85,
+                    label_visibility="collapsed",
+                    key="gdt_token_textarea"
+                )
+                
+                with st.expander(t("gdt_token_guide", lang), expanded=True):
+                    st.markdown("""
+                    * **Bước 1:** Mở trình duyệt, truy cập và đăng nhập tài khoản doanh nghiệp tại [hoadondientu.gdt.gov.vn](https://hoadondientu.gdt.gov.vn).
+                    * **Bước 2:** Nhấn phím **F12** (hoặc chuột phải chọn *Kiểm tra / Inspect*) -> Chọn tab **Network** (Mạng).
+                    * **Bước 3:** Nhấp vào chức năng tra cứu bất kỳ (ví dụ: *Tra cứu hóa đơn mua vào*).
+                    * **Bước 4:** Chọn 1 dòng request tên `purchase` hoặc `session` -> Trong bảng **Headers** -> Tìm mục **Request Headers** -> Sao chép giá trị sau chữ `Bearer ` trong dòng `Authorization` và dán vào ô trên.
+                    """)
+                    
+                if st.button(t("gdt_btn_save_token", lang), type="primary", use_container_width=True, key="btn_save_gdt_token"):
+                    if user_token_input.strip():
+                        tok = user_token_input.strip()
+                        if tok.startswith("Bearer "):
+                            tok = tok.replace("Bearer ", "").strip()
+                        st.session_state["gdt_token"] = tok
+                        st.success("✅ Đã kích hoạt phiên kết nối Tổng Cục Thuế thành công!")
+                        st.rerun()
+                    else:
+                        st.error("Vui lòng dán Bearer Token phiên làm việc từ cổng Tổng Cục Thuế!")
+            else:
+                creds_c1, creds_c2 = st.columns(2)
+                with creds_c1:
+                    mst_input = st.text_input(t("gdt_tax_code_label", lang), key="gdt_login_mst", placeholder="Ví dụ: 0100109106")
+                    pass_input = st.text_input(t("gdt_password_label", lang), type="password", key="gdt_login_pwd", placeholder="Mật khẩu thuế...")
+                with creds_c2:
+                    if not st.session_state.get("gdt_captcha_key") or not st.session_state.get("gdt_captcha_img"):
+                        ok_c, c_k, c_img, _ = GDTTaxSync.get_captcha()
+                        if ok_c:
+                            st.session_state["gdt_captcha_key"] = c_k
+                            st.session_state["gdt_captcha_img"] = c_img
+                    
+                    cap_row1, cap_row2 = st.columns([1.2, 0.8])
+                    with cap_row1:
+                        if st.session_state.get("gdt_captcha_img"):
+                            c_content = st.session_state["gdt_captcha_img"]
+                            if c_content.startswith("data:image"):
+                                st.image(c_content, width=170)
+                            elif "<svg" in c_content:
+                                st.html(c_content)
+                            else:
+                                st.image(f"data:image/png;base64,{c_content}", width=170)
+                        else:
+                            st.caption("ℹ️ Máy chủ TCT yêu cầu kết nối an toàn. Bạn có thể sử dụng phương thức 'Dán Token' ở trên để kết nối tức thì!")
+                    with cap_row2:
+                        if st.button(t("gdt_captcha_refresh", lang), use_container_width=True, key="btn_ref_cap"):
+                            ok_c, c_k, c_img, _ = GDTTaxSync.get_captcha()
+                            if ok_c:
+                                st.session_state["gdt_captcha_key"] = c_k
+                                st.session_state["gdt_captcha_img"] = c_img
+                                st.rerun()
+                                
+                    cap_val = st.text_input(t("gdt_captcha_label", lang), key="gdt_login_cvalue", placeholder="Nhập mã captcha...")
+                    
+                if st.button(t("gdt_btn_login", lang), type="primary", use_container_width=True, key="btn_submit_gdt_login"):
+                    if not mst_input or not pass_input:
+                        st.error("Vui lòng nhập đầy đủ Mã số thuế và Mật khẩu thuế!")
+                    elif not cap_val:
+                        st.error("Vui lòng nhập mã Captcha xác thực!")
+                    else:
+                        with st.spinner("Đang kết nối và xác thực với máy chủ Tổng Cục Thuế..."):
+                            ok_auth, tok_msg, _ = GDTTaxSync.authenticate(
+                                username=mst_input,
+                                password=pass_input,
+                                ckey=st.session_state.get("gdt_captcha_key", ""),
+                                cvalue=cap_val
+                            )
+                            if ok_auth:
+                                st.session_state["gdt_token"] = tok_msg
+                                st.session_state["gdt_logged_in_mst"] = mst_input
+                                st.success("✅ Đăng nhập Tổng Cục Thuế thành công!")
+                                st.rerun()
+                            else:
+                                st.error(f"❌ {tok_msg}")
+                                ok_c, c_k, c_img, _ = GDTTaxSync.get_captcha()
+                                if ok_c:
+                                    st.session_state["gdt_captcha_key"] = c_k
+                                    st.session_state["gdt_captcha_img"] = c_img
+
+        # 2. Khung Tra cứu & Tải hóa đơn khi đã có Token
+        if st.session_state.get("gdt_token"):
+            st.markdown(f"#### {t('gdt_query_title', lang)}")
+            
+            q_c1, q_c2, q_c3, q_c4 = st.columns([1.3, 1.0, 1.0, 1.2])
+            with q_c1:
+                inv_type_opt = st.selectbox(
+                    t("gdt_inv_type_label", lang),
+                    ["purchase", "sold"],
+                    format_func=lambda x: t("gdt_inv_type_purchase", lang) if x=="purchase" else t("gdt_inv_type_sold", lang),
+                    key="sel_gdt_inv_type"
+                )
+            with q_c2:
+                d_from = st.date_input(t("gdt_date_from", lang), value=datetime.date.today().replace(day=1), key="gdt_date_from_val")
+            with q_c3:
+                d_to = st.date_input(t("gdt_date_to", lang), value=datetime.date.today(), key="gdt_date_to_val")
+            with q_c4:
+                seller_mst_filter = st.text_input(t("gdt_seller_mst_filter", lang), placeholder="Mã số thuế NCC...", key="gdt_filter_mst").strip()
+                
+            if st.button(t("gdt_btn_query", lang), type="primary", use_container_width=True, key="btn_exec_gdt_query"):
+                with st.spinner("Đang truy vấn danh sách hóa đơn từ Tổng Cục Thuế..."):
+                    d_from_str = d_from.strftime("%d/%m/%Y")
+                    d_to_str = d_to.strftime("%d/%m/%Y")
+                    ok_q, inv_list, total_count, err_q = GDTTaxSync.query_invoices(
+                        token=st.session_state["gdt_token"],
+                        invoice_type=inv_type_opt,
+                        from_date=d_from_str,
+                        to_date=d_to_str,
+                        seller_mst=seller_mst_filter if seller_mst_filter else None
+                    )
+                    if ok_q:
+                        st.session_state["gdt_invoices"] = inv_list
+                        st.session_state["gdt_total"] = total_count
+                        if total_count > 0:
+                            st.success(t("gdt_query_success", lang).format(total=total_count))
+                        else:
+                            st.warning("Không tìm thấy hóa đơn nào trong khoảng thời gian đã chọn trên Tổng Cục Thuế.")
+                    else:
+                        st.error(f"❌ {err_q}")
+                        if "hết hạn" in err_q.lower() or "token" in err_q.lower():
+                            st.session_state["gdt_token"] = ""
+                            time.sleep(1.5)
+                            st.rerun()
+
+            # Bảng hiển thị danh sách hóa đơn và bộ chọn
+            if st.session_state.get("gdt_invoices"):
+                gdt_invs = st.session_state["gdt_invoices"]
+                
+                st.markdown("---")
+                st.markdown("##### 📋 Danh sách hóa đơn điện tử Tổng Cục Thuế:")
+                
+                table_rows = []
+                for idx, item in enumerate(gdt_invs):
+                    table_rows.append({
+                        "Chọn": True,
+                        "STT": idx + 1,
+                        "Số HĐ": item.get("so_hd", ""),
+                        "Ký hiệu": item.get("kh_hd", ""),
+                        "Ngày lập": item.get("ngay_lap", ""),
+                        "Mã số thuế": item.get("mst_nban", ""),
+                        "Tên Người bán": item.get("ten_nban", ""),
+                        "Chưa thuế (đ)": item.get("tien_chua_thue", 0.0),
+                        "Tiền thuế (đ)": item.get("tien_thue", 0.0),
+                        "Tổng thanh toán (đ)": item.get("tong_tien", 0.0),
+                        "Mã CQT": item.get("ma_cqt", "Có mã CQT"),
+                        "Chữ ký số": item.get("chu_ky_so", "Đã xác thực")
+                    })
+                    
+                df_display = pd.DataFrame(table_rows)
+                
+                m1, m2, m3, m4 = st.columns(4)
+                m1.metric("Tổng HĐ tìm thấy", f"{len(df_display)}")
+                m2.metric("Doanh số chưa thuế", f"{df_display['Chưa thuế (đ)'].sum():,.0f} đ")
+                m3.metric("Thuế GTGT", f"{df_display['Tiền thuế (đ)'].sum():,.0f} đ")
+                m4.metric("Tổng tiền thanh toán", f"{df_display['Tổng thanh toán (đ)'].sum():,.0f} đ")
+                
+                edited_df = st.data_editor(
+                    df_display,
+                    column_config={
+                        "Chọn": st.column_config.CheckboxColumn("Chọn tải", default=True),
+                        "Chưa thuế (đ)": st.column_config.NumberColumn(format="%,.0f đ"),
+                        "Tiền thuế (đ)": st.column_config.NumberColumn(format="%,.0f đ"),
+                        "Tổng thanh toán (đ)": st.column_config.NumberColumn(format="%,.0f đ"),
+                    },
+                    disabled=["STT", "Số HĐ", "Ký hiệu", "Ngày lập", "Mã số thuế", "Tên Người bán", "Chưa thuế (đ)", "Tiền thuế (đ)", "Tổng thanh toán (đ)", "Mã CQT", "Chữ ký số"],
+                    hide_index=True,
+                    use_container_width=True,
+                    height=300,
+                    key="editor_gdt_invoices"
+                )
+                
+                selected_indices = edited_df[edited_df["Chọn"] == True].index.tolist()
+                selected_inv_objects = [gdt_invs[i] for i in selected_indices if i < len(gdt_invs)]
+                
+                act_c1, act_c2 = st.columns(2)
+                with act_c1:
+                    if st.button(f"{t('gdt_btn_sync_selected', lang)} ({len(selected_inv_objects)} HĐ)", type="primary", use_container_width=True, key="btn_sync_gdt_to_db"):
+                        if not selected_inv_objects:
+                            st.warning("Vui lòng tích chọn ít nhất 1 hóa đơn để nạp vào hệ thống!")
+                        else:
+                            with st.spinner(f"Đang tự động nạp {len(selected_inv_objects)} hóa đơn vào cơ sở dữ liệu..."):
+                                sync_res = GDTTaxSync.sync_invoices_to_database(
+                                    token=st.session_state["gdt_token"],
+                                    selected_invoices=selected_inv_objects,
+                                    db_instance=db,
+                                    user_id=current_user
+                                )
+                                st.balloons()
+                                st.success(t("gdt_sync_success_msg", lang).format(success=sync_res['success_count']))
+                                if sync_res['duplicate_count'] > 0:
+                                    st.info(f"ℹ️ Đã tự động cập nhật / bỏ qua **{sync_res['duplicate_count']}** hóa đơn đã có sẵn.")
+                                time.sleep(1.5)
+                                st.rerun()
+                                
+                with act_c2:
+                    if selected_inv_objects:
+                        zip_bytes = GDTTaxSync.create_invoices_zip_bundle(
+                            token=st.session_state["gdt_token"],
+                            selected_invoices=selected_inv_objects
+                        )
+                        zip_filename = f"Hoa_Don_GDT_Goc_{len(selected_inv_objects)}_HD_{datetime.date.today().strftime('%Y%m%d_%H%M%S')}.zip"
+                        st.download_button(
+                            label=f"{t('gdt_btn_download_zip', lang)} ({len(selected_inv_objects)} XML)",
+                            data=zip_bytes,
+                            file_name=zip_filename,
+                            mime="application/zip",
+                            use_container_width=True,
+                            key="btn_dl_gdt_zip"
+                        )
 
 # =========================================================================
 # TAB 2: BẢNG KÊ & NHÀ CUNG CẤP
