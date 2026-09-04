@@ -6,6 +6,7 @@ import tempfile
 import time
 import datetime
 from parser import InvoiceParser
+from gdt_sync import GDTTaxSync
 from database import InvoiceDatabase, get_user_database
 from exporter import InvoiceExporter
 from i18n import t
