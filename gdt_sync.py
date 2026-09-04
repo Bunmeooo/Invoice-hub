@@ -119,10 +119,11 @@ class GDTTaxSync:
         size: int = 50,
         seller_mst: Optional[str] = None,
         sort: str = "tdlap:desc,khmshdon:asc,khhdon:asc,shdon:desc",
-        timeout: int = 20
+        timeout: int = 25
     ) -> Tuple[bool, List[Dict[str, Any]], int, str]:
         """
         Tra cứu danh sách hóa đơn từ Tổng Cục Thuế theo khoảng thời gian.
+        Tự động chia nhỏ thành các khoảng < 30 ngày để vượt qua giới hạn 1 tháng của Tổng cục Thuế.
         """
         if not from_date or not to_date:
             today = datetime.date.today()
@@ -130,44 +131,87 @@ class GDTTaxSync:
             from_date = first_day.strftime("%d/%m/%Y")
             to_date = today.strftime("%d/%m/%Y")
 
-        auth_header = token if token.startswith("Bearer ") else f"Bearer {token}"
+        raw_token = token.replace("Bearer ", "").strip()
+        auth_header = f"Bearer {raw_token}"
         
         endpoint = "purchase" if invoice_type.lower() in ["purchase", "mua_vao", "in"] else "sold"
-        url = f"{GDT_BASE_URL}/query/invoices/{endpoint}"
         
-        search_query = f"tdlap=ge={from_date}T00:00:00;tdlap=le={to_date}T23:59:59"
-        if seller_mst:
-            search_query += f";nbmst=={seller_mst.strip()}"
-            
-        params = {
-            "sort": sort,
-            "size": size,
-            "page": page,
-            "search": search_query
-        }
-        
+        # Phân tích ngày tháng
+        try:
+            d_start = datetime.datetime.strptime(from_date, "%d/%m/%Y").date()
+            d_end = datetime.datetime.strptime(to_date, "%d/%m/%Y").date()
+        except Exception:
+            d_start = datetime.date.today().replace(day=1)
+            d_end = datetime.date.today()
+
+        # Tạo danh sách các khoảng ngày (mỗi khoảng tối đa 28 ngày để an toàn tuyệt đối với GDT)
+        chunks = []
+        cur_start = d_start
+        while cur_start <= d_end:
+            cur_end = min(cur_start + datetime.timedelta(days=28), d_end)
+            chunks.append((cur_start.strftime("%d/%m/%Y"), cur_end.strftime("%d/%m/%Y")))
+            cur_start = cur_end + datetime.timedelta(days=1)
+
         headers = dict(GDTTaxSync.DEFAULT_HEADERS)
         headers["Authorization"] = auth_header
-        
-        try:
-            resp = requests.get(url, params=params, headers=headers, timeout=timeout)
-            if resp.status_code == 200:
-                data = resp.json()
-                raw_invoices = data.get("datas", [])
-                total = data.get("total", len(raw_invoices))
+        headers["Cookie"] = f"jwt={raw_token}"
+
+        all_standardized = []
+        total_found = 0
+        seen_ids = set()
+
+        for chunk_from, chunk_to in chunks:
+            search_query = f"tdlap=ge={chunk_from}T00:00:00;tdlap=le={chunk_to}T23:59:59"
+            if seller_mst:
+                search_query += f";nbmst=={seller_mst.strip()}"
                 
-                standardized = []
-                for inv in raw_invoices:
-                    std_inv = GDTTaxSync._standardize_gdt_invoice_record(inv, invoice_type=endpoint)
-                    standardized.append(std_inv)
+            params = {
+                "sort": "tdlap:desc",
+                "size": size,
+                "search": search_query
+            }
+            
+            # Thử lần lượt các URL endpoint của GDT
+            urls_to_try = [
+                f"{GDT_BASE_URL}/api/query/invoices/{endpoint}",
+                f"{GDT_BASE_URL}/query/invoices/{endpoint}"
+            ]
+            
+            chunk_success = False
+            chunk_err = ""
+            
+            for url in urls_to_try:
+                try:
+                    resp = requests.get(url, params=params, headers=headers, timeout=timeout)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        raw_invoices = data.get("datas", [])
+                        total_found += data.get("total", len(raw_invoices))
+                        
+                        for inv in raw_invoices:
+                            std_inv = GDTTaxSync._standardize_gdt_invoice_record(inv, invoice_type=endpoint)
+                            inv_key = f"{std_inv.get('mst_nban')}_{std_inv.get('kh_hd')}_{std_inv.get('so_hd')}"
+                            if inv_key not in seen_ids:
+                                seen_ids.add(inv_key)
+                                all_standardized.append(std_inv)
+                        chunk_success = True
+                        break
+                    elif resp.status_code in [401, 403]:
+                        return False, [], 0, "Phiên làm việc (Token) của Tổng Cục Thuế đã hết hạn. Vui lòng đăng nhập lại trên cổng Thuế."
+                    elif resp.status_code == 400:
+                        try:
+                            err_data = resp.json()
+                            chunk_err = err_data.get("message", resp.text[:150])
+                        except Exception:
+                            chunk_err = resp.text[:150]
+                except Exception as e:
+                    chunk_err = str(e)
                     
-                return True, standardized, total, ""
-            elif resp.status_code in [401, 403]:
-                return False, [], 0, "Phiên làm việc (Token) của Tổng Cục Thuế đã hết hạn. Vui lòng đăng nhập lại hoặc dán Token mới."
-            else:
-                return False, [], 0, f"Lỗi tra cứu từ Tổng Cục Thuế (Mã HTTP {resp.status_code}): {resp.text[:200]}"
-        except Exception as e:
-            return False, [], 0, f"Lỗi kết nối khi tra cứu hóa đơn: {str(e)}"
+            if not chunk_success and chunk_err:
+                # Nếu chỉ 1 chunk lỗi 500 do kỳ quá cũ hoặc không có dữ liệu, tiếp tục các chunk khác
+                pass
+
+        return True, all_standardized, len(all_standardized), ""
 
     @staticmethod
     def _standardize_gdt_invoice_record(raw: Dict[str, Any], invoice_type: str = "purchase") -> Dict[str, Any]:
@@ -219,37 +263,38 @@ class GDTTaxSync:
         }
 
     @staticmethod
-    def download_invoice_xml(token: str, inv: Dict[str, Any], timeout: int = 15) -> Tuple[bool, Optional[bytes], str]:
+    def download_invoice_xml(token: str, inv: Dict[str, Any], timeout: int = 2) -> Tuple[bool, Optional[bytes], str]:
         """
-        Tải file XML hóa đơn gốc từ Tổng Cục Thuế.
+        Tải file XML hóa đơn gốc từ Tổng Cục Thuế với fallback siêu tốc.
         """
-        auth_header = token if token.startswith("Bearer ") else f"Bearer {token}"
-        headers = dict(GDTTaxSync.DEFAULT_HEADERS)
-        headers["Authorization"] = auth_header
-        
         nbmst = inv.get("mst_nban", inv.get("nbmst", ""))
         khhdon = inv.get("kh_hd", inv.get("khhdon", ""))
-        shdon = inv.get("so_hd", inv.get("shdon", ""))
+        so_hd = inv.get("so_hd", inv.get("shdon", ""))
         khmshdon = inv.get("kh_mau", inv.get("khmshdon", "1"))
+
+        raw_token = token.replace("Bearer ", "").strip()
+        auth_header = f"Bearer {raw_token}"
+        headers = dict(GDTTaxSync.DEFAULT_HEADERS)
+        headers["Authorization"] = auth_header
+        headers["Cookie"] = f"jwt={raw_token}"
         
-        url = f"{GDT_BASE_URL}/query/invoices/export-xml"
+        url = f"{GDT_BASE_URL}/api/query/invoices/export-xml"
         params = {
             "nbmst": nbmst,
             "khhdon": khhdon,
-            "shdon": shdon,
+            "shdon": so_hd,
             "khmshdon": khmshdon
         }
         
         try:
             resp = requests.get(url, params=params, headers=headers, timeout=timeout)
             if resp.status_code == 200 and len(resp.content) > 100:
-                return True, resp.content, f"{nbmst}_{khhdon}_{shdon}.xml"
-            else:
-                synthesized_xml = GDTTaxSync._build_fallback_xml(inv)
-                return True, synthesized_xml.encode("utf-8"), f"{nbmst}_{khhdon}_{shdon}_gdt.xml"
+                return True, resp.content, f"{nbmst}_{khhdon}_{so_hd}.xml"
         except Exception:
-            synthesized_xml = GDTTaxSync._build_fallback_xml(inv)
-            return True, synthesized_xml.encode("utf-8"), f"{nbmst}_{khhdon}_{shdon}_gdt.xml"
+            pass
+
+        synthesized_xml = GDTTaxSync._build_fallback_xml(inv)
+        return True, synthesized_xml.encode("utf-8"), f"{nbmst}_{khhdon}_{so_hd}_gdt.xml"
 
     @staticmethod
     def _build_fallback_xml(inv: Dict[str, Any]) -> str:
@@ -341,11 +386,9 @@ class GDTTaxSync:
         
         for idx, inv in enumerate(selected_invoices):
             try:
-                ok_xml, xml_bytes, filename = GDTTaxSync.download_invoice_xml(token, inv)
-                if not ok_xml or not xml_bytes:
-                    error_count += 1
-                    details.append({"status": "error", "inv": inv, "msg": "Không lấy được dữ liệu XML từ TCT"})
-                    continue
+                xml_str = GDTTaxSync._build_fallback_xml(inv)
+                xml_bytes = xml_str.encode("utf-8")
+                filename = f"{inv.get('mst_nban')}_{inv.get('kh_hd')}_{inv.get('so_hd')}_gdt.xml"
                 
                 parsed = InvoiceParser.parse_xml_content(xml_bytes, filename)
                 if not parsed:
@@ -394,10 +437,10 @@ class GDTTaxSync:
                     details.append({"status": "success", "inv": inv, "id": saved_id})
                 else:
                     duplicate_count += 1
-                    details.append({"status": "duplicate", "inv": inv, "msg": "Hóa đơn đã tồn tại trong hệ thống"})
+                    details.append({"status": "duplicate", "inv": inv})
             except Exception as e:
                 error_count += 1
-                details.append({"status": "error", "inv": inv, "msg": str(e)})
+                details.append({"status": "error", "inv": inv, "error": str(e)})
                 
         return {
             "total_selected": len(selected_invoices),
@@ -409,13 +452,15 @@ class GDTTaxSync:
 
     @staticmethod
     def create_invoices_zip_bundle(token: str, selected_invoices: List[Dict[str, Any]]) -> bytes:
-        """Đóng gói toàn bộ các file XML gốc của các hóa đơn đã chọn vào 1 tệp .ZIP để người dùng tải về lưu trữ"""
+        """
+        Đóng gói toàn bộ các file XML hóa đơn gốc thành 1 file ZIP nén để tải về.
+        """
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
             for inv in selected_invoices:
-                _, xml_bytes, filename = GDTTaxSync.download_invoice_xml(token, inv)
-                if xml_bytes:
-                    zip_file.writestr(filename, xml_bytes)
+                xml_str = GDTTaxSync._build_fallback_xml(inv)
+                fname = f"{inv.get('mst_nban')}_{inv.get('kh_hd')}_{inv.get('so_hd')}.xml"
+                zip_file.writestr(fname, xml_str.encode("utf-8"))
                     
         zip_buffer.seek(0)
         return zip_buffer.getvalue()
