@@ -1280,248 +1280,321 @@ with tab1:
         else:
             st.info(t("preview_empty", lang))
 
-    # ================= SUB-TAB 2: ĐỒNG BỘ TỔNG CỤC THUẾ =================
+    # ================= SUB-TAB 2: ĐỒNG BỘ TỔNG CỤC THUẾ (ĐA TÀI KHOẢN VĨNH VIỄN) =================
     with subtab_gdt:
-        gdt_head_l, gdt_head_r = st.columns([3, 1])
-        with gdt_head_l:
-            st.markdown(f"### 🏛️ {t('gdt_subtab_sync', lang)}")
-            st.caption("Cổng thông tin Hóa đơn điện tử Tổng cục Thuế: [https://hoadondientu.gdt.gov.vn](https://hoadondientu.gdt.gov.vn)")
-        with gdt_head_r:
-            if st.session_state.get("gdt_token"):
-                st.success(t("gdt_status_connected", lang))
-                if st.button("🔌 Ngắt kết nối TCT", key="btn_disc_gdt", use_container_width=True):
-                    st.session_state["gdt_token"] = ""
-                    st.session_state["gdt_invoices"] = []
-                    st.rerun()
-            else:
-                st.info(t("gdt_status_disconnected", lang))
-                
-        # 1. Khung Đăng nhập / Kết nối TCT nếu chưa có Token
-        if not st.session_state.get("gdt_token"):
-            auth_mode = st.radio(
-                "Phương thức kết nối Tổng Cục Thuế:",
-                [t("gdt_auth_mode_token", lang), t("gdt_auth_mode_creds", lang)],
-                horizontal=True,
-                key="gdt_auth_mode_choice"
+        st.markdown(f"### 🏛️ {t('gdt_subtab_sync', lang)}")
+        st.caption("Cổng thông tin Hóa đơn điện tử Tổng cục Thuế: [https://hoadondientu.gdt.gov.vn](https://hoadondientu.gdt.gov.vn) — Hệ thống quản lý đa tài khoản thuế liên kết vĩnh viễn.")
+        
+        # 1. Tải danh sách các tài khoản thuế đã liên kết từ Database
+        gdt_accounts = db.get_gdt_accounts(user_id=current_user)
+        
+        # Tự động nạp tài khoản mặc định TOYO SOLAR nếu database chưa có liên kết nào
+        if not gdt_accounts and current_user in ["ketoan_demo", "hznguyen1997"]:
+            default_token = "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiIyNjAxMDg0NjU3IiwidHlwZSI6MiwiZXhwIjoxNzg4NTk1MTkyLCJpYXQiOjE3ODg1MDg3OTJ9.WWnJE5P7nIV1r_UM0vL-lmffU8kDLTq-6MI9uUVeshlZTvGvBAiybYD5h9UjIS7xneCaTsdmriCywVw97fSnsA"
+            db.save_gdt_account(
+                user_id=current_user,
+                account_name="CÔNG TY TNHH TOYO SOLAR",
+                mst="2601084657",
+                token=default_token
             )
-            
-            if auth_mode == t("gdt_auth_mode_token", lang):
-                st.markdown(f"**{t('gdt_token_label', lang)}**")
-                user_token_input = st.text_area(
-                    "Bearer Token",
-                    value=st.session_state.get("gdt_token", ""),
-                    placeholder="eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiIwMTAwMTA5MTA2IiwiZXhwIjoxNzg... (hoặc dán toàn bộ chuỗi Header Authorization)",
-                    height=85,
-                    label_visibility="collapsed",
-                    key="gdt_token_textarea"
-                )
-                
-                with st.expander(t("gdt_token_guide", lang), expanded=True):
-                    st.markdown("""
-                    * **Bước 1:** Mở trình duyệt, truy cập và đăng nhập tài khoản doanh nghiệp tại [hoadondientu.gdt.gov.vn](https://hoadondientu.gdt.gov.vn).
-                    * **Bước 2:** Nhấn phím **F12** (hoặc chuột phải chọn *Kiểm tra / Inspect*) -> Chọn tab **Network** (Mạng).
-                    * **Bước 3:** Nhấp vào chức năng tra cứu bất kỳ (ví dụ: *Tra cứu hóa đơn mua vào*).
-                    * **Bước 4:** Chọn 1 dòng request tên `purchase` hoặc `session` -> Trong bảng **Headers** -> Tìm mục **Request Headers** -> Sao chép giá trị sau chữ `Bearer ` trong dòng `Authorization` và dán vào ô trên.
-                    """)
-                    
-                if st.button(t("gdt_btn_save_token", lang), type="primary", use_container_width=True, key="btn_save_gdt_token"):
-                    if user_token_input.strip():
-                        tok = user_token_input.strip()
-                        if tok.startswith("Bearer "):
-                            tok = tok.replace("Bearer ", "").strip()
-                        st.session_state["gdt_token"] = tok
-                        st.success("✅ Đã kích hoạt phiên kết nối Tổng Cục Thuế thành công!")
-                        st.rerun()
-                    else:
-                        st.error("Vui lòng dán Bearer Token phiên làm việc từ cổng Tổng Cục Thuế!")
-            else:
-                creds_c1, creds_c2 = st.columns(2)
-                with creds_c1:
-                    mst_input = st.text_input(t("gdt_tax_code_label", lang), key="gdt_login_mst", placeholder="Ví dụ: 0100109106")
-                    pass_input = st.text_input(t("gdt_password_label", lang), type="password", key="gdt_login_pwd", placeholder="Mật khẩu thuế...")
-                with creds_c2:
-                    if not st.session_state.get("gdt_captcha_key") or not st.session_state.get("gdt_captcha_img"):
-                        ok_c, c_k, c_img, _ = GDTTaxSync.get_captcha()
-                        if ok_c:
-                            st.session_state["gdt_captcha_key"] = c_k
-                            st.session_state["gdt_captcha_img"] = c_img
-                    
-                    cap_row1, cap_row2 = st.columns([1.2, 0.8])
-                    with cap_row1:
-                        if st.session_state.get("gdt_captcha_img"):
-                            c_content = st.session_state["gdt_captcha_img"]
-                            if c_content.startswith("data:image"):
-                                st.image(c_content, width=170)
-                            elif "<svg" in c_content:
-                                st.html(c_content)
-                            else:
-                                st.image(f"data:image/png;base64,{c_content}", width=170)
-                        else:
-                            st.caption("ℹ️ Máy chủ TCT yêu cầu kết nối an toàn. Bạn có thể sử dụng phương thức 'Dán Token' ở trên để kết nối tức thì!")
-                    with cap_row2:
-                        if st.button(t("gdt_captcha_refresh", lang), use_container_width=True, key="btn_ref_cap"):
-                            ok_c, c_k, c_img, _ = GDTTaxSync.get_captcha()
-                            if ok_c:
-                                st.session_state["gdt_captcha_key"] = c_k
-                                st.session_state["gdt_captcha_img"] = c_img
-                                st.rerun()
-                                
-                    cap_val = st.text_input(t("gdt_captcha_label", lang), key="gdt_login_cvalue", placeholder="Nhập mã captcha...")
-                    
-                if st.button(t("gdt_btn_login", lang), type="primary", use_container_width=True, key="btn_submit_gdt_login"):
-                    if not mst_input or not pass_input:
-                        st.error("Vui lòng nhập đầy đủ Mã số thuế và Mật khẩu thuế!")
-                    elif not cap_val:
-                        st.error("Vui lòng nhập mã Captcha xác thực!")
-                    else:
-                        with st.spinner("Đang kết nối và xác thực với máy chủ Tổng Cục Thuế..."):
-                            ok_auth, tok_msg, _ = GDTTaxSync.authenticate(
-                                username=mst_input,
-                                password=pass_input,
-                                ckey=st.session_state.get("gdt_captcha_key", ""),
-                                cvalue=cap_val
-                            )
-                            if ok_auth:
-                                st.session_state["gdt_token"] = tok_msg
-                                st.session_state["gdt_logged_in_mst"] = mst_input
-                                st.success("✅ Đăng nhập Tổng Cục Thuế thành công!")
-                                st.rerun()
-                            else:
-                                st.error(f"❌ {tok_msg}")
-                                ok_c, c_k, c_img, _ = GDTTaxSync.get_captcha()
-                                if ok_c:
-                                    st.session_state["gdt_captcha_key"] = c_k
-                                    st.session_state["gdt_captcha_img"] = c_img
+            gdt_accounts = db.get_gdt_accounts(user_id=current_user)
 
-        # 2. Khung Tra cứu & Tải hóa đơn khi đã có Token
-        if st.session_state.get("gdt_token"):
-            st.markdown(f"#### {t('gdt_query_title', lang)}")
-            
-            q_c1, q_c2, q_c3, q_c4 = st.columns([1.3, 1.0, 1.0, 1.2])
-            with q_c1:
-                inv_type_opt = st.selectbox(
-                    t("gdt_inv_type_label", lang),
-                    ["purchase", "sold"],
-                    format_func=lambda x: t("gdt_inv_type_purchase", lang) if x=="purchase" else t("gdt_inv_type_sold", lang),
-                    key="sel_gdt_inv_type"
-                )
-            with q_c2:
-                d_from = st.date_input(t("gdt_date_from", lang), value=datetime.date.today().replace(day=1), key="gdt_date_from_val")
-            with q_c3:
-                d_to = st.date_input(t("gdt_date_to", lang), value=datetime.date.today(), key="gdt_date_to_val")
-            with q_c4:
-                seller_mst_filter = st.text_input(t("gdt_seller_mst_filter", lang), placeholder="Mã số thuế NCC...", key="gdt_filter_mst").strip()
-                
-            if st.button(t("gdt_btn_query", lang), type="primary", use_container_width=True, key="btn_exec_gdt_query"):
-                with st.spinner("Đang truy vấn danh sách hóa đơn từ Tổng Cục Thuế..."):
-                    d_from_str = d_from.strftime("%d/%m/%Y")
-                    d_to_str = d_to.strftime("%d/%m/%Y")
-                    ok_q, inv_list, total_count, err_q = GDTTaxSync.query_invoices(
-                        token=st.session_state["gdt_token"],
-                        invoice_type=inv_type_opt,
-                        from_date=d_from_str,
-                        to_date=d_to_str,
-                        seller_mst=seller_mst_filter if seller_mst_filter else None
-                    )
-                    if ok_q:
-                        st.session_state["gdt_invoices"] = inv_list
-                        st.session_state["gdt_total"] = total_count
-                        if total_count > 0:
-                            st.success(t("gdt_query_success", lang).format(total=total_count))
-                        else:
-                            st.warning("Không tìm thấy hóa đơn nào trong khoảng thời gian đã chọn trên Tổng Cục Thuế.")
-                    else:
-                        st.error(f"❌ {err_q}")
-                        if "hết hạn" in err_q.lower() or "token" in err_q.lower():
-                            st.session_state["gdt_token"] = ""
-                            time.sleep(1.5)
-                            st.rerun()
+        # Xây dựng danh sách lựa chọn tài khoản
+        acc_choice_map = {}
+        for acc in gdt_accounts:
+            label = f"🏢 {acc['account_name']} (MST: {acc['mst']})"
+            acc_choice_map[str(acc["id"])] = label
+        acc_choice_map["__new__"] = t("gdt_opt_add_new", lang)
 
-            # Bảng hiển thị danh sách hóa đơn và bộ chọn
-            if st.session_state.get("gdt_invoices"):
-                gdt_invs = st.session_state["gdt_invoices"]
+        acc_keys = list(acc_choice_map.keys())
+        default_idx = 0 if gdt_accounts else (len(acc_keys) - 1)
+        
+        col_acc_sel, col_acc_stat = st.columns([2.5, 1.5])
+        with col_acc_sel:
+            selected_acc_key = st.selectbox(
+                t("gdt_select_acc_label", lang),
+                options=acc_keys,
+                format_func=lambda k: acc_choice_map[k],
+                index=default_idx,
+                key="sel_active_gdt_account"
+            )
+
+        # 2. XỬ LÝ KHI CHỌN 1 TÀI KHOẢN ĐÃ LIÊN KẾT
+        if selected_acc_key != "__new__":
+            current_acc = next((a for a in gdt_accounts if str(a["id"]) == selected_acc_key), None)
+            
+            if current_acc:
+                tok_info = GDTTaxSync.parse_jwt_token_info(current_acc["token"])
                 
+                with col_acc_stat:
+                    st.markdown("<div style='padding-top: 28px;'>", unsafe_allow_html=True)
+                    if not tok_info["is_expired"]:
+                        st.success(f"{t('gdt_status_valid', lang)} ({tok_info['remaining_hours']}h)")
+                    else:
+                        st.warning(t("gdt_status_expired", lang))
+                    st.markdown("</div>", unsafe_allow_html=True)
+                
+                # Card thông tin chi tiết tài khoản & Cụm nút thao tác
+                card_bg = "#111827" if theme == "dark" else ("#FFF5F7" if theme == "sakura" else "#F8FAFC")
+                card_border = "#374151" if theme == "dark" else ("#FECDD3" if theme == "sakura" else "#E2E8F0")
+                card_text = "#F9FAFB" if theme == "dark" else ("#4C0519" if theme == "sakura" else "#0F172A")
+                card_muted = "#9CA3AF" if theme == "dark" else ("#9D174D" if theme == "sakura" else "#64748B")
+                
+                info_html = f"""
+                <div style="background-color: {card_bg}; border: 1px solid {card_border}; border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; color: {card_text};">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                        <div>
+                            <div style="font-size: 15px; font-weight: 700; color: #2563EB;">🏢 {current_acc['account_name']}</div>
+                            <div style="font-size: 12.5px; margin-top: 2px;">
+                                <b>{t('gdt_card_mst', lang)}</b> <code style="background: rgba(37,99,235,0.1); padding: 1px 6px; border-radius: 4px;">{current_acc['mst']}</code>
+                                &nbsp;|&nbsp; <b>{t('gdt_card_last_sync', lang)}</b> <span style="color: {card_muted};">{current_acc['last_sync'] or 'Chưa đồng bộ'}</span>
+                            </div>
+                        </div>
+                        <div style="font-size: 12px; text-align: right;">
+                            <div><b>{t('gdt_card_status', lang)}</b> {t('gdt_status_valid', lang) if not tok_info['is_expired'] else t('gdt_status_expired', lang)}</div>
+                            <div style="color: {card_muted}; font-size: 11px;">Hạn phiên: {tok_info['exp_date_str'] or 'N/A'}</div>
+                        </div>
+                    </div>
+                </div>
+                """
+                st.html(info_html)
+
+                # Cụm công cụ Quản lý liên kết (Cập nhật Token / Xóa liên kết)
+                btn_c1, btn_c2, _ = st.columns([1.2, 1.2, 2.6])
+                with btn_c1:
+                    with st.popover(t("gdt_btn_update_token", lang), use_container_width=True):
+                        st.markdown(f"##### {t('gdt_btn_update_token', lang)}")
+                        st.caption(f"Dán chuỗi Bearer Token / Cookie mới cho **{current_acc['account_name']}**:")
+                        new_tok_input = st.text_area(
+                            "New Token",
+                            value="",
+                            placeholder="eyJhbGciOiJIUzUxMiJ9...",
+                            height=80,
+                            label_visibility="collapsed",
+                            key=f"txt_new_tok_{current_acc['id']}"
+                        )
+                        if st.button("💾 " + ("Xác nhận Lưu Token Mới" if lang=="vi" else "Save New Token"), type="primary", use_container_width=True, key=f"btn_save_tok_{current_acc['id']}"):
+                            if new_tok_input.strip():
+                                ok_up, msg_up = db.update_gdt_account_token(current_acc["id"], new_tok_input.strip(), user_id=current_user)
+                                if ok_up:
+                                    st.success(msg_up)
+                                    time.sleep(0.8)
+                                    st.rerun()
+                                else:
+                                    st.error(msg_up)
+                            else:
+                                st.error("Vui lòng dán Token mới!")
+
+                with btn_c2:
+                    with st.popover(t("gdt_btn_delete_acc", lang), use_container_width=True):
+                        st.warning(f"⚠️ {t('gdt_delete_confirm', lang)}")
+                        st.markdown(f"• **Doanh nghiệp:** `{current_acc['account_name']}`  \n• **MST:** `{current_acc['mst']}`")
+                        if st.button(t("gdt_btn_confirm_delete", lang), type="primary", use_container_width=True, key=f"btn_del_acc_{current_acc['id']}"):
+                            ok_del, msg_del = db.delete_gdt_account(current_acc["id"], user_id=current_user)
+                            if ok_del:
+                                st.success(msg_del)
+                                if "gdt_invoices" in st.session_state:
+                                    st.session_state["gdt_invoices"] = []
+                                time.sleep(0.8)
+                                st.rerun()
+                            else:
+                                st.error(msg_del)
+
+                # ================= KHUNG TRA CỨU HÓA ĐƠN TỔNG CỤC THUẾ =================
                 st.markdown("---")
-                st.markdown("##### 📋 Danh sách hóa đơn điện tử Tổng Cục Thuế:")
+                st.markdown(f"#### {t('gdt_query_title', lang)} — {current_acc['account_name']}")
                 
-                table_rows = []
-                for idx, item in enumerate(gdt_invs):
-                    table_rows.append({
-                        "Chọn": True,
-                        "STT": idx + 1,
-                        "Số HĐ": item.get("so_hd", ""),
-                        "Ký hiệu": item.get("kh_hd", ""),
-                        "Ngày lập": item.get("ngay_lap", ""),
-                        "Mã số thuế": item.get("mst_nban", ""),
-                        "Tên Người bán": item.get("ten_nban", ""),
-                        "Chưa thuế (đ)": item.get("tien_chua_thue", 0.0),
-                        "Tiền thuế (đ)": item.get("tien_thue", 0.0),
-                        "Tổng thanh toán (đ)": item.get("tong_tien", 0.0),
-                        "Mã CQT": item.get("ma_cqt", "Có mã CQT"),
-                        "Chữ ký số": item.get("chu_ky_so", "Đã xác thực")
-                    })
+                q_c1, q_c2, q_c3, q_c4 = st.columns([1.3, 1.0, 1.0, 1.2])
+                with q_c1:
+                    inv_type_opt = st.selectbox(
+                        t("gdt_inv_type_label", lang),
+                        ["purchase", "sold"],
+                        format_func=lambda x: t("gdt_inv_type_purchase", lang) if x=="purchase" else t("gdt_inv_type_sold", lang),
+                        key="sel_gdt_inv_type"
+                    )
+                with q_c2:
+                    d_from = st.date_input(t("gdt_date_from", lang), value=datetime.date.today().replace(day=1), key="gdt_date_from_val")
+                with q_c3:
+                    d_to = st.date_input(t("gdt_date_to", lang), value=datetime.date.today(), key="gdt_date_to_val")
+                with q_c4:
+                    seller_mst_filter = st.text_input(t("gdt_seller_mst_filter", lang), placeholder="Mã số thuế NCC...", key="gdt_filter_mst").strip()
                     
-                df_display = pd.DataFrame(table_rows)
+                if st.button(t("gdt_btn_query", lang), type="primary", use_container_width=True, key="btn_exec_gdt_query"):
+                    with st.spinner(f"Đang kết nối Tổng Cục Thuế tra cứu hóa đơn của {current_acc['account_name']}..."):
+                        d_from_str = d_from.strftime("%d/%m/%Y")
+                        d_to_str = d_to.strftime("%d/%m/%Y")
+                        ok_q, inv_list, total_count, err_q = GDTTaxSync.query_invoices(
+                            token=current_acc["token"],
+                            invoice_type=inv_type_opt,
+                            from_date=d_from_str,
+                            to_date=d_to_str,
+                            seller_mst=seller_mst_filter if seller_mst_filter else None
+                        )
+                        if ok_q:
+                            st.session_state["gdt_invoices"] = inv_list
+                            st.session_state["gdt_total"] = total_count
+                            db.update_gdt_account_last_sync(current_acc["id"])
+                            if total_count > 0:
+                                st.success(t("gdt_query_success", lang).format(total=total_count))
+                            else:
+                                st.warning("Không tìm thấy hóa đơn nào trong khoảng thời gian đã chọn trên Tổng Cục Thuế.")
+                        else:
+                            st.error(f"❌ {err_q}")
+                            if "hết hạn" in err_q.lower() or "token" in err_q.lower():
+                                st.info("💡 Bạn có thể bấm nút **'🔄 Cập Nhật Token Mới'** ở trên để làm mới phiên làm việc.")
+
+                # Bảng hiển thị danh sách hóa đơn và bộ chọn nạp vào hệ thống
+                if st.session_state.get("gdt_invoices"):
+                    gdt_invs = st.session_state["gdt_invoices"]
+                    
+                    st.markdown("---")
+                    st.markdown(f"##### 📋 Danh sách hóa đơn điện tử Tổng Cục Thuế ({len(gdt_invs)} HĐ):")
+                    
+                    table_rows = []
+                    for idx, item in enumerate(gdt_invs):
+                        table_rows.append({
+                            "Chọn": True,
+                            "STT": idx + 1,
+                            "Số HĐ": item.get("so_hd", ""),
+                            "Ký hiệu": item.get("kh_hd", ""),
+                            "Ngày lập": item.get("ngay_lap", ""),
+                            "Mã số thuế": item.get("mst_nban", ""),
+                            "Tên Người bán": item.get("ten_nban", ""),
+                            "Chưa thuế (đ)": item.get("tien_chua_thue", 0.0),
+                            "Tiền thuế (đ)": item.get("tien_thue", 0.0),
+                            "Tổng thanh toán (đ)": item.get("tong_tien", 0.0),
+                            "Mã CQT": item.get("ma_cqt", "Có mã CQT"),
+                            "Chữ ký số": item.get("chu_ky_so", "Đã xác thực")
+                        })
+                        
+                    df_display = pd.DataFrame(table_rows)
+                    
+                    m1, m2, m3, m4 = st.columns(4)
+                    m1.metric("Tổng HĐ tìm thấy", f"{len(df_display)}")
+                    m2.metric("Doanh số chưa thuế", f"{df_display['Chưa thuế (đ)'].sum():,.0f} đ")
+                    m3.metric("Thuế GTGT", f"{df_display['Tiền thuế (đ)'].sum():,.0f} đ")
+                    m4.metric("Tổng tiền thanh toán", f"{df_display['Tổng thanh toán (đ)'].sum():,.0f} đ")
+                    
+                    edited_df = st.data_editor(
+                        df_display,
+                        column_config={
+                            "Chọn": st.column_config.CheckboxColumn("Chọn tải", default=True),
+                            "Chưa thuế (đ)": st.column_config.NumberColumn(format="%,.0f đ"),
+                            "Tiền thuế (đ)": st.column_config.NumberColumn(format="%,.0f đ"),
+                            "Tổng thanh toán (đ)": st.column_config.NumberColumn(format="%,.0f đ"),
+                        },
+                        disabled=["STT", "Số HĐ", "Ký hiệu", "Ngày lập", "Mã số thuế", "Tên Người bán", "Chưa thuế (đ)", "Tiền thuế (đ)", "Tổng thanh toán (đ)", "Mã CQT", "Chữ ký số"],
+                        hide_index=True,
+                        use_container_width=True,
+                        height=300,
+                        key="editor_gdt_invoices"
+                    )
+                    
+                    selected_indices = edited_df[edited_df["Chọn"] == True].index.tolist()
+                    selected_inv_objects = [gdt_invs[i] for i in selected_indices if i < len(gdt_invs)]
+                    
+                    act_c1, act_c2 = st.columns(2)
+                    with act_c1:
+                        if st.button(f"{t('gdt_btn_sync_selected', lang)} ({len(selected_inv_objects)} HĐ)", type="primary", use_container_width=True, key="btn_sync_gdt_to_db"):
+                            if not selected_inv_objects:
+                                st.warning("Vui lòng tích chọn ít nhất 1 hóa đơn để nạp vào hệ thống!")
+                            else:
+                                with st.spinner(f"Đang tự động thẩm định TT 91/2026 và nạp {len(selected_inv_objects)} hóa đơn vào cơ sở dữ liệu..."):
+                                    sync_res = GDTTaxSync.sync_invoices_to_database(
+                                        token=current_acc["token"],
+                                        selected_invoices=selected_inv_objects,
+                                        db_instance=db,
+                                        user_id=current_user
+                                    )
+                                    db.update_gdt_account_last_sync(current_acc["id"])
+                                    st.balloons()
+                                    st.success(t("gdt_sync_success_msg", lang).format(success=sync_res['success_count']))
+                                    if sync_res['duplicate_count'] > 0:
+                                        st.info(f"ℹ️ Đã tự động cập nhật / bỏ qua **{sync_res['duplicate_count']}** hóa đơn đã có sẵn.")
+                                    time.sleep(1.5)
+                                    st.rerun()
+                                    
+                    with act_c2:
+                        if selected_inv_objects:
+                            zip_bytes = GDTTaxSync.create_invoices_zip_bundle(
+                                token=current_acc["token"],
+                                selected_invoices=selected_inv_objects
+                            )
+                            zip_filename = f"Hoa_Don_GDT_Goc_{current_acc['mst']}_{len(selected_inv_objects)}_HD_{datetime.date.today().strftime('%Y%m%d_%H%M%S')}.zip"
+                            st.download_button(
+                                label=f"{t('gdt_btn_download_zip', lang)} ({len(selected_inv_objects)} XML)",
+                                data=zip_bytes,
+                                file_name=zip_filename,
+                                mime="application/zip",
+                                use_container_width=True,
+                                key="btn_dl_gdt_zip"
+                            )
+
+        # 3. XỬ LÝ KHI CHỌN "➕ THÊM LIÊN KẾT DOANH NGHIỆP / MST MỚI"
+        else:
+            with col_acc_stat:
+                st.markdown("<div style='padding-top: 28px;'>", unsafe_allow_html=True)
+                st.info(t("gdt_status_disconnected", lang))
+                st.markdown("</div>", unsafe_allow_html=True)
                 
-                m1, m2, m3, m4 = st.columns(4)
-                m1.metric("Tổng HĐ tìm thấy", f"{len(df_display)}")
-                m2.metric("Doanh số chưa thuế", f"{df_display['Chưa thuế (đ)'].sum():,.0f} đ")
-                m3.metric("Thuế GTGT", f"{df_display['Tiền thuế (đ)'].sum():,.0f} đ")
-                m4.metric("Tổng tiền thanh toán", f"{df_display['Tổng thanh toán (đ)'].sum():,.0f} đ")
+            st.markdown(f"#### {t('gdt_form_add_title', lang)}")
+            st.caption("Liên kết tài khoản thuế được lưu vĩnh viễn vào cơ sở dữ liệu riêng tư của bạn. Bạn có thể thêm nhiều doanh nghiệp và chuyển đổi bất kỳ lúc nào.")
+            
+            form_c1, form_c2 = st.columns(2)
+            with form_c1:
+                new_comp_name = st.text_input(t("gdt_input_comp_name", lang), placeholder=t("gdt_ph_comp_name", lang), key="new_acc_comp_name")
+                new_comp_mst = st.text_input(t("gdt_input_mst", lang), placeholder="vd: 2601084657", key="new_acc_comp_mst")
                 
-                edited_df = st.data_editor(
-                    df_display,
-                    column_config={
-                        "Chọn": st.column_config.CheckboxColumn("Chọn tải", default=True),
-                        "Chưa thuế (đ)": st.column_config.NumberColumn(format="%,.0f đ"),
-                        "Tiền thuế (đ)": st.column_config.NumberColumn(format="%,.0f đ"),
-                        "Tổng thanh toán (đ)": st.column_config.NumberColumn(format="%,.0f đ"),
-                    },
-                    disabled=["STT", "Số HĐ", "Ký hiệu", "Ngày lập", "Mã số thuế", "Tên Người bán", "Chưa thuế (đ)", "Tiền thuế (đ)", "Tổng thanh toán (đ)", "Mã CQT", "Chữ ký số"],
-                    hide_index=True,
-                    use_container_width=True,
-                    height=300,
-                    key="editor_gdt_invoices"
+            with form_c2:
+                st.markdown(f"**{t('gdt_token_label', lang)}**")
+                new_token_val = st.text_area(
+                    "Token",
+                    placeholder="eyJhbGciOiJIUzUxMiJ9... (dán Token phiên làm việc)",
+                    height=90,
+                    label_visibility="collapsed",
+                    key="new_acc_token_val"
                 )
                 
-                selected_indices = edited_df[edited_df["Chọn"] == True].index.tolist()
-                selected_inv_objects = [gdt_invs[i] for i in selected_indices if i < len(gdt_invs)]
-                
-                act_c1, act_c2 = st.columns(2)
-                with act_c1:
-                    if st.button(f"{t('gdt_btn_sync_selected', lang)} ({len(selected_inv_objects)} HĐ)", type="primary", use_container_width=True, key="btn_sync_gdt_to_db"):
-                        if not selected_inv_objects:
-                            st.warning("Vui lòng tích chọn ít nhất 1 hóa đơn để nạp vào hệ thống!")
+            # Hướng dẫn & Tiện ích Bookmarklet 1-Click
+            with st.expander(t("gdt_bookmarklet_btn", lang) + " / " + t("gdt_token_guide", lang), expanded=True):
+                st.markdown("""
+                * **Cách 1 (Siêu Tốc 1-Click Bookmarklet - Khuyên dùng):**
+                  1. Mở trang [hoadondientu.gdt.gov.vn](https://hoadondientu.gdt.gov.vn) và đăng nhập tài khoản doanh nghiệp.
+                  2. Mở Console (F12) hoặc Dán đoạn mã sau vào thanh địa chỉ trình duyệt và nhấn Enter để Token tự động sao chép vào bộ nhớ:
+                """)
+                st.code(GDTTaxSync.get_bookmarklet_code(), language="javascript")
+                st.markdown("""
+                * **Cách 2 (Thủ công qua F12 Network):**
+                  1. Trên trang thuế -> Nhấn **F12** -> Tab **Network** -> Bấm vào chức năng *Tra cứu hóa đơn*.
+                  2. Chọn 1 dòng request tên `purchase` hoặc `sold` -> Tìm mục `Authorization` trong Request Headers -> Copy chuỗi sau `Bearer ` và dán vào ô bên trên.
+                """)
+
+            if st.button(t("gdt_btn_save_permanent", lang), type="primary", use_container_width=True, key="btn_save_permanent_link"):
+                tok_clean = new_token_val.replace("Bearer ", "").strip()
+                if not tok_clean:
+                    st.error("Vui lòng dán Bearer Token phiên làm việc từ cổng Tổng Cục Thuế!")
+                else:
+                    # Tự động suy luận MST từ token nếu chưa nhập
+                    parsed_tok = GDTTaxSync.parse_jwt_token_info(tok_clean)
+                    final_mst = new_comp_mst.strip() or parsed_tok.get("mst", "")
+                    final_name = new_comp_name.strip() or f"Doanh Nghiệp MST {final_mst}"
+                    
+                    if not final_mst:
+                        st.error("Vui lòng nhập Mã số thuế Doanh nghiệp (MST)!")
+                    else:
+                        ok_save, msg_save, saved_id = db.save_gdt_account(
+                            user_id=current_user,
+                            account_name=final_name,
+                            mst=final_mst,
+                            token=tok_clean
+                        )
+                        if ok_save:
+                            st.balloons()
+                            st.success(msg_save)
+                            time.sleep(1.2)
+                            st.rerun()
                         else:
-                            with st.spinner(f"Đang tự động nạp {len(selected_inv_objects)} hóa đơn vào cơ sở dữ liệu..."):
-                                sync_res = GDTTaxSync.sync_invoices_to_database(
-                                    token=st.session_state["gdt_token"],
-                                    selected_invoices=selected_inv_objects,
-                                    db_instance=db,
-                                    user_id=current_user
-                                )
-                                st.balloons()
-                                st.success(t("gdt_sync_success_msg", lang).format(success=sync_res['success_count']))
-                                if sync_res['duplicate_count'] > 0:
-                                    st.info(f"ℹ️ Đã tự động cập nhật / bỏ qua **{sync_res['duplicate_count']}** hóa đơn đã có sẵn.")
-                                time.sleep(1.5)
-                                st.rerun()
-                                
-                with act_c2:
-                    if selected_inv_objects:
-                        zip_bytes = GDTTaxSync.create_invoices_zip_bundle(
-                            token=st.session_state["gdt_token"],
-                            selected_invoices=selected_inv_objects
-                        )
-                        zip_filename = f"Hoa_Don_GDT_Goc_{len(selected_inv_objects)}_HD_{datetime.date.today().strftime('%Y%m%d_%H%M%S')}.zip"
-                        st.download_button(
-                            label=f"{t('gdt_btn_download_zip', lang)} ({len(selected_inv_objects)} XML)",
-                            data=zip_bytes,
-                            file_name=zip_filename,
-                            mime="application/zip",
-                            use_container_width=True,
-                            key="btn_dl_gdt_zip"
-                        )
+                            st.error(msg_save)
 
 # =========================================================================
 # TAB 2: BẢNG KÊ & NHÀ CUNG CẤP

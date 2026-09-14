@@ -138,6 +138,22 @@ class InvoiceDatabase:
                     UNIQUE(user_id, usage_date)
                 )
             """)
+
+            # ================= BẢNG QUẢN LÝ ĐA TÀI KHOẢN THUẾ GDT LIÊN KẾT =================
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS gdt_accounts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id TEXT NOT NULL,
+                    account_name TEXT NOT NULL,
+                    mst TEXT NOT NULL,
+                    token TEXT NOT NULL,
+                    cookies TEXT DEFAULT '',
+                    last_sync TEXT DEFAULT '',
+                    is_default INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(user_id, mst)
+                )
+            """)
             
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS user_subscriptions (
@@ -621,4 +637,123 @@ class InvoiceDatabase:
         except Exception as e:
             print(f"Error deleting all feedback: {e}")
             return False
+
+    # ================= QUẢN LÝ ĐA TÀI KHOẢN THUẾ LIÊN KẾT VĨNH VIỄN =================
+    def get_gdt_accounts(self, user_id: str) -> List[Dict[str, Any]]:
+        """Lấy danh sách các tài khoản thuế đã liên kết của người dùng."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT * FROM gdt_accounts 
+                WHERE user_id = ? 
+                ORDER BY is_default DESC, id DESC
+            """, (user_id,))
+            rows = cursor.fetchall()
+            return [dict(r) for r in rows]
+
+    def save_gdt_account(
+        self,
+        user_id: str,
+        account_name: str,
+        mst: str,
+        token: str,
+        cookies: str = ""
+    ) -> Tuple[bool, str, Optional[int]]:
+        """
+        Lưu hoặc cập nhật một tài khoản thuế liên kết vĩnh viễn.
+        """
+        clean_mst = mst.strip()
+        clean_name = account_name.strip() or f"Doanh nghiệp MST {clean_mst}"
+        clean_token = token.replace("Bearer ", "").strip()
+        
+        if not clean_mst:
+            return False, "Mã số thuế không được để trống!", None
+        if not clean_token:
+            return False, "Mã Token / Phiên làm việc không được để trống!", None
+            
+        now_str = datetime.now().strftime("%d/%m/%Y %H:%M")
+        
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                # Kiểm tra tài khoản đã tồn tại chưa
+                cursor.execute("SELECT id FROM gdt_accounts WHERE user_id = ? AND mst = ?", (user_id, clean_mst))
+                existing = cursor.fetchone()
+                
+                if existing:
+                    acc_id = existing["id"]
+                    cursor.execute("""
+                        UPDATE gdt_accounts 
+                        SET account_name = ?, token = ?, cookies = ?, last_sync = ?
+                        WHERE id = ?
+                    """, (clean_name, clean_token, cookies, now_str, acc_id))
+                    conn.commit()
+                    return True, f"✅ Đã cập nhật liên kết thành công cho: {clean_name}", acc_id
+                else:
+                    cursor.execute("""
+                        INSERT INTO gdt_accounts (user_id, account_name, mst, token, cookies, last_sync, is_default)
+                        VALUES (?, ?, ?, ?, ?, ?, 1)
+                    """, (user_id, clean_name, clean_mst, clean_token, cookies, now_str))
+                    conn.commit()
+                    acc_id = cursor.lastrowid
+                    return True, f"🎉 Đã liên kết và lưu vĩnh viễn tài khoản: {clean_name}", acc_id
+        except Exception as e:
+            return False, f"Lỗi lưu tài khoản: {str(e)}", None
+
+    def delete_gdt_account(self, account_id: int, user_id: str = None) -> Tuple[bool, str]:
+        """Xóa một tài khoản thuế đã liên kết."""
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                if user_id:
+                    cursor.execute("DELETE FROM gdt_accounts WHERE id = ? AND user_id = ?", (account_id, user_id))
+                else:
+                    cursor.execute("DELETE FROM gdt_accounts WHERE id = ?", (account_id,))
+                conn.commit()
+                if cursor.rowcount > 0:
+                    return True, "✅ Đã xóa liên kết tài khoản thuế thành công!"
+                else:
+                    return False, "Không tìm thấy liên kết cần xóa."
+        except Exception as e:
+            return False, f"Lỗi khi xóa liên kết: {str(e)}"
+
+    def update_gdt_account_token(self, account_id: int, new_token: str, user_id: str = None) -> Tuple[bool, str]:
+        """Cập nhật Bearer Token mới cho một tài khoản thuế đã liên kết."""
+        clean_token = new_token.replace("Bearer ", "").strip()
+        if not clean_token:
+            return False, "Token mới không được để trống!"
+            
+        now_str = datetime.now().strftime("%d/%m/%Y %H:%M")
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                if user_id:
+                    cursor.execute("""
+                        UPDATE gdt_accounts 
+                        SET token = ?, last_sync = ?
+                        WHERE id = ? AND user_id = ?
+                    """, (clean_token, now_str, account_id, user_id))
+                else:
+                    cursor.execute("""
+                        UPDATE gdt_accounts 
+                        SET token = ?, last_sync = ?
+                        WHERE id = ?
+                    """, (clean_token, now_str, account_id))
+                conn.commit()
+                return True, "✅ Đã làm mới phiên kết nối thành công!"
+        except Exception as e:
+            return False, f"Lỗi cập nhật token: {str(e)}"
+
+    def update_gdt_account_last_sync(self, account_id: int) -> bool:
+        """Cập nhật thời điểm đồng bộ gần nhất."""
+        now_str = datetime.now().strftime("%d/%m/%Y %H:%M")
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("UPDATE gdt_accounts SET last_sync = ? WHERE id = ?", (now_str, account_id))
+                conn.commit()
+                return True
+        except Exception:
+            return False
+
 

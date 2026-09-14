@@ -14,6 +14,8 @@ Hỗ trợ:
 
 import io
 import json
+import base64
+import time
 import zipfile
 import datetime
 import requests
@@ -39,6 +41,70 @@ class GDTTaxSync:
         "Sec-Fetch-Mode": "cors",
         "Sec-Fetch-Site": "same-origin"
     }
+
+    @staticmethod
+    def parse_jwt_token_info(token: str) -> Dict[str, Any]:
+        """
+        Giải mã thông tin từ JWT Bearer Token của Tổng Cục Thuế (MST, Thời hạn hết hạn, v.v.).
+        """
+        clean_token = token.replace("Bearer ", "").strip()
+        result = {
+            "valid_format": False,
+            "mst": "",
+            "exp_timestamp": 0,
+            "exp_date_str": "",
+            "is_expired": True,
+            "remaining_seconds": 0,
+            "remaining_hours": 0.0,
+            "raw_payload": {}
+        }
+        
+        if not clean_token:
+            return result
+            
+        parts = clean_token.split(".")
+        if len(parts) < 2:
+            return result
+            
+        try:
+            # Base64url decode payload (part 1)
+            payload_b64 = parts[1]
+            # Add padding if needed
+            rem = len(payload_b64) % 4
+            if rem > 0:
+                payload_b64 += "=" * (4 - rem)
+            
+            payload_bytes = base64.urlsafe_b64decode(payload_b64.encode("utf-8"))
+            payload = json.loads(payload_bytes.decode("utf-8"))
+            
+            mst = str(payload.get("sub", ""))
+            exp = int(payload.get("exp", 0))
+            now_ts = int(time.time())
+            
+            exp_dt = datetime.datetime.fromtimestamp(exp) if exp > 0 else None
+            exp_str = exp_dt.strftime("%d/%m/%Y %H:%M:%S") if exp_dt else ""
+            
+            rem_sec = max(0, exp - now_ts) if exp > 0 else 0
+            rem_hrs = round(rem_sec / 3600.0, 1)
+            
+            result["valid_format"] = True
+            result["mst"] = mst
+            result["exp_timestamp"] = exp
+            result["exp_date_str"] = exp_str
+            result["is_expired"] = (now_ts >= exp) if exp > 0 else False
+            result["remaining_seconds"] = rem_sec
+            result["remaining_hours"] = rem_hrs
+            result["raw_payload"] = payload
+            return result
+        except Exception:
+            return result
+
+    @staticmethod
+    def get_bookmarklet_code() -> str:
+        """
+        Trả về đoạn mã Bookmarklet JavaScript 1-Click để kế toán tự động lấy Token từ trình duyệt thuế.
+        """
+        return """javascript:(function(){try{var m=document.cookie.match(/jwt=([^;]+)/);if(m&&m[1]){navigator.clipboard.writeText(m[1]).then(function(){alert('✅ ĐÃ COPY TOKEN TỔNG CỤC THUẾ THÀNH CÔNG!\\n\\nBạn hãy quay lại giao diện Invoice Hub và dán vào ô Token nhé!')}).catch(function(){prompt('Sao chép mã Token sau:',m[1])})}else{alert('⚠️ Không tìm thấy phiên làm việc trên trang này!\\n\\nVui lòng mở trang hoadondientu.gdt.gov.vn và đăng nhập tài khoản trước.')}}catch(e){alert('Lỗi: '+e.message)}})();"""
 
     @staticmethod
     def get_captcha(timeout: int = 10) -> Tuple[bool, str, str, str]:
