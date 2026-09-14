@@ -148,12 +148,20 @@ class InvoiceDatabase:
                     mst TEXT NOT NULL,
                     token TEXT NOT NULL,
                     cookies TEXT DEFAULT '',
+                    tax_password TEXT DEFAULT '',
                     last_sync TEXT DEFAULT '',
                     is_default INTEGER DEFAULT 0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE(user_id, mst)
                 )
             """)
+            cursor.execute("PRAGMA table_info(gdt_accounts)")
+            existing_gdt_cols = [col[1] for col in cursor.fetchall()]
+            if "tax_password" not in existing_gdt_cols:
+                cursor.execute("ALTER TABLE gdt_accounts ADD COLUMN tax_password TEXT DEFAULT ''")
+            if "cookies" not in existing_gdt_cols:
+                cursor.execute("ALTER TABLE gdt_accounts ADD COLUMN cookies TEXT DEFAULT ''")
+
             
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS user_subscriptions (
@@ -657,7 +665,8 @@ class InvoiceDatabase:
         account_name: str,
         mst: str,
         token: str,
-        cookies: str = ""
+        cookies: str = "",
+        tax_password: str = ""
     ) -> Tuple[bool, str, Optional[int]]:
         """
         Lưu hoặc cập nhật một tài khoản thuế liên kết vĩnh viễn.
@@ -665,6 +674,7 @@ class InvoiceDatabase:
         clean_mst = mst.strip()
         clean_name = account_name.strip() or f"Doanh nghiệp MST {clean_mst}"
         clean_token = token.replace("Bearer ", "").strip()
+        clean_pwd = tax_password.strip()
         
         if not clean_mst:
             return False, "Mã số thuế không được để trống!", None
@@ -677,23 +687,25 @@ class InvoiceDatabase:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
                 # Kiểm tra tài khoản đã tồn tại chưa
-                cursor.execute("SELECT id FROM gdt_accounts WHERE user_id = ? AND mst = ?", (user_id, clean_mst))
+                cursor.execute("SELECT id, tax_password FROM gdt_accounts WHERE user_id = ? AND mst = ?", (user_id, clean_mst))
                 existing = cursor.fetchone()
                 
                 if existing:
                     acc_id = existing["id"]
+                    # Giữ mật khẩu cũ nếu mật khẩu mới rỗng
+                    final_pwd = clean_pwd if clean_pwd else (existing["tax_password"] or "")
                     cursor.execute("""
                         UPDATE gdt_accounts 
-                        SET account_name = ?, token = ?, cookies = ?, last_sync = ?
+                        SET account_name = ?, token = ?, cookies = ?, tax_password = ?, last_sync = ?
                         WHERE id = ?
-                    """, (clean_name, clean_token, cookies, now_str, acc_id))
+                    """, (clean_name, clean_token, cookies, final_pwd, now_str, acc_id))
                     conn.commit()
                     return True, f"✅ Đã cập nhật liên kết thành công cho: {clean_name}", acc_id
                 else:
                     cursor.execute("""
-                        INSERT INTO gdt_accounts (user_id, account_name, mst, token, cookies, last_sync, is_default)
-                        VALUES (?, ?, ?, ?, ?, ?, 1)
-                    """, (user_id, clean_name, clean_mst, clean_token, cookies, now_str))
+                        INSERT INTO gdt_accounts (user_id, account_name, mst, token, cookies, tax_password, last_sync, is_default)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+                    """, (user_id, clean_name, clean_mst, clean_token, cookies, clean_pwd, now_str))
                     conn.commit()
                     acc_id = cursor.lastrowid
                     return True, f"🎉 Đã liên kết và lưu vĩnh viễn tài khoản: {clean_name}", acc_id
@@ -717,7 +729,13 @@ class InvoiceDatabase:
         except Exception as e:
             return False, f"Lỗi khi xóa liên kết: {str(e)}"
 
-    def update_gdt_account_token(self, account_id: int, new_token: str, user_id: str = None) -> Tuple[bool, str]:
+    def update_gdt_account_token(
+        self, 
+        account_id: int, 
+        new_token: str, 
+        user_id: str = None, 
+        tax_password: str = None
+    ) -> Tuple[bool, str]:
         """Cập nhật Bearer Token mới cho một tài khoản thuế đã liên kết."""
         clean_token = new_token.replace("Bearer ", "").strip()
         if not clean_token:
@@ -727,22 +745,51 @@ class InvoiceDatabase:
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
-                if user_id:
-                    cursor.execute("""
-                        UPDATE gdt_accounts 
-                        SET token = ?, last_sync = ?
-                        WHERE id = ? AND user_id = ?
-                    """, (clean_token, now_str, account_id, user_id))
+                if tax_password is not None and tax_password != "":
+                    if user_id:
+                        cursor.execute("""
+                            UPDATE gdt_accounts 
+                            SET token = ?, tax_password = ?, last_sync = ?
+                            WHERE id = ? AND user_id = ?
+                        """, (clean_token, tax_password.strip(), now_str, account_id, user_id))
+                    else:
+                        cursor.execute("""
+                            UPDATE gdt_accounts 
+                            SET token = ?, tax_password = ?, last_sync = ?
+                            WHERE id = ?
+                        """, (clean_token, tax_password.strip(), now_str, account_id))
                 else:
-                    cursor.execute("""
-                        UPDATE gdt_accounts 
-                        SET token = ?, last_sync = ?
-                        WHERE id = ?
-                    """, (clean_token, now_str, account_id))
+                    if user_id:
+                        cursor.execute("""
+                            UPDATE gdt_accounts 
+                            SET token = ?, last_sync = ?
+                            WHERE id = ? AND user_id = ?
+                        """, (clean_token, now_str, account_id, user_id))
+                    else:
+                        cursor.execute("""
+                            UPDATE gdt_accounts 
+                            SET token = ?, last_sync = ?
+                            WHERE id = ?
+                        """, (clean_token, now_str, account_id))
                 conn.commit()
                 return True, "✅ Đã làm mới phiên kết nối thành công!"
         except Exception as e:
             return False, f"Lỗi cập nhật token: {str(e)}"
+
+    def update_gdt_account_password(self, account_id: int, tax_password: str, user_id: str = None) -> Tuple[bool, str]:
+        """Cập nhật mật khẩu tra cứu thuế đã lưu."""
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                if user_id:
+                    cursor.execute("UPDATE gdt_accounts SET tax_password = ? WHERE id = ? AND user_id = ?", (tax_password.strip(), account_id, user_id))
+                else:
+                    cursor.execute("UPDATE gdt_accounts SET tax_password = ? WHERE id = ?", (tax_password.strip(), account_id))
+                conn.commit()
+                return True, "✅ Đã lưu mật khẩu thuế thành công!"
+        except Exception as e:
+            return False, f"Lỗi cập nhật mật khẩu: {str(e)}"
+
 
     def update_gdt_account_last_sync(self, account_id: int) -> bool:
         """Cập nhật thời điểm đồng bộ gần nhất."""

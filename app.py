@@ -1359,46 +1359,142 @@ with tab1:
                 """
                 st.html(info_html)
 
-                # Cụm công cụ Quản lý liên kết (Cập nhật Token / Xóa liên kết)
-                btn_c1, btn_c2, _ = st.columns([1.2, 1.2, 2.6])
+                # Cụm công cụ Quản lý liên kết (Tự Động Cập Nhật Token / Tùy chọn khác)
+                btn_c1, btn_c2, _ = st.columns([1.6, 1.4, 1.5])
                 with btn_c1:
-                    with st.popover(t("gdt_btn_update_token", lang), use_container_width=True):
-                        st.markdown(f"##### {t('gdt_btn_update_token', lang)}")
-                        st.caption(f"Dán chuỗi Bearer Token / Cookie mới cho **{current_acc['account_name']}**:")
-                        new_tok_input = st.text_area(
-                            "New Token",
-                            value="",
-                            placeholder="eyJhbGciOiJIUzUxMiJ9...",
-                            height=80,
-                            label_visibility="collapsed",
-                            key=f"txt_new_tok_{current_acc['id']}"
+                    with st.popover(t("gdt_btn_auto_update", lang), use_container_width=True):
+                        st.markdown(f"##### {t('gdt_pop_auto_title', lang)}")
+                        st.caption(f"Tự động kết nối Tổng Cục Thuế & gia hạn phiên cho **{current_acc['account_name']}** (MST: `{current_acc['mst']}`):")
+                        
+                        # Cache captcha trong session_state để tránh reload liên tục khi gõ phím
+                        cap_sess_k = f"cap_gdt_acc_{current_acc['id']}"
+                        if cap_sess_k not in st.session_state or not st.session_state[cap_sess_k].get("key"):
+                            ok_c, k_c, ocr_c, b64_c, err_c = GDTTaxSync.get_captcha_with_auto_ocr()
+                            st.session_state[cap_sess_k] = {"key": k_c, "ocr": ocr_c, "b64": b64_c, "err": err_c}
+                            
+                        curr_cap = st.session_state[cap_sess_k]
+                        
+                        # Ô nhập mật khẩu thuế (Nếu đã lưu thì điền sẵn)
+                        saved_tax_pwd = current_acc.get("tax_password", "")
+                        auto_tax_pwd = st.text_input(
+                            t("gdt_password_label", lang),
+                            value=saved_tax_pwd,
+                            type="password",
+                            placeholder="Nhập mật khẩu tra cứu hóa đơn TCT...",
+                            key=f"auto_pwd_inp_{current_acc['id']}"
                         )
-                        if st.button("💾 " + ("Xác nhận Lưu Token Mới" if lang=="vi" else "Save New Token"), type="primary", use_container_width=True, key=f"btn_save_tok_{current_acc['id']}"):
-                            if new_tok_input.strip():
-                                ok_up, msg_up = db.update_gdt_account_token(current_acc["id"], new_tok_input.strip(), user_id=current_user)
-                                if ok_up:
-                                    st.success(msg_up)
+                        
+                        # Khung hiển thị Captcha trực quan & Ô nhập mã AI đã tự điền
+                        st.markdown(f"<span style='font-size: 12.5px; font-weight: 600;'>{t('gdt_captcha_ocr_label', lang)}</span>", unsafe_allow_html=True)
+                        col_cap_img, col_cap_txt = st.columns([1.1, 1.9])
+                        with col_cap_img:
+                            if curr_cap.get("b64"):
+                                st.markdown(
+                                    f'<div style="background: #FFFFFF; padding: 3px 6px; border-radius: 6px; border: 1px solid #CBD5E1; display: inline-block; margin-top: 4px;">'
+                                    f'<img src="data:image/png;base64,{curr_cap["b64"]}" height="34" style="display: block;" />'
+                                    f'</div>',
+                                    unsafe_allow_html=True
+                                )
+                            else:
+                                st.caption("Đang tải Captcha...")
+                        with col_cap_txt:
+                            cap_val_input = st.text_input(
+                                "Captcha Val",
+                                value=curr_cap.get("ocr", ""),
+                                placeholder="Mã xác thực...",
+                                label_visibility="collapsed",
+                                key=f"auto_cap_val_{current_acc['id']}"
+                            )
+                            
+                        # Nút đổi mã Captcha
+                        if st.button(f"🔄 {t('gdt_captcha_refresh', lang)}", key=f"btn_ref_cap_{current_acc['id']}"):
+                            ok_c, k_c, ocr_c, b64_c, err_c = GDTTaxSync.get_captcha_with_auto_ocr()
+                            st.session_state[cap_sess_k] = {"key": k_c, "ocr": ocr_c, "b64": b64_c, "err": err_c}
+                            st.rerun()
+                            
+                        chk_save_pwd = st.checkbox(t("gdt_save_pwd_chk", lang), value=True, key=f"chk_save_pwd_{current_acc['id']}")
+                        
+                        # Nút bấm kích hoạt tự động
+                        if st.button(t("gdt_btn_run_auto", lang), type="primary", use_container_width=True, key=f"btn_exec_auto_{current_acc['id']}"):
+                            if not auto_tax_pwd.strip():
+                                st.error("Vui lòng nhập Mật khẩu tra cứu thuế của doanh nghiệp!")
+                            elif not cap_val_input.strip() or not curr_cap.get("key"):
+                                st.error("Vui lòng nhập mã Captcha xác thực!")
+                            else:
+                                with st.spinner("Đang kết nối Tổng Cục Thuế và thẩm định phiên làm việc mới..."):
+                                    auth_ok, token_or_msg, raw_data = GDTTaxSync.authenticate(
+                                        username=current_acc["mst"],
+                                        password=auto_tax_pwd.strip(),
+                                        ckey=curr_cap["key"],
+                                        cvalue=cap_val_input.strip()
+                                    )
+                                    if auth_ok:
+                                        pwd_to_store = auto_tax_pwd.strip() if chk_save_pwd else ""
+                                        ok_db, msg_db = db.update_gdt_account_token(
+                                            account_id=current_acc["id"],
+                                            new_token=token_or_msg,
+                                            user_id=current_user,
+                                            tax_password=pwd_to_store
+                                        )
+                                        st.session_state.pop(cap_sess_k, None)
+                                        st.toast(t("gdt_auto_success", lang), icon="🎉")
+                                        st.success(t("gdt_auto_success", lang))
+                                        time.sleep(0.8)
+                                        st.rerun()
+                                    else:
+                                        st.error(f"❌ {token_or_msg}")
+                                        ok_c, k_c, ocr_c, b64_c, err_c = GDTTaxSync.get_captcha_with_auto_ocr()
+                                        st.session_state[cap_sess_k] = {"key": k_c, "ocr": ocr_c, "b64": b64_c, "err": err_c}
+
+                with btn_c2:
+                    with st.popover(t("gdt_btn_manual_options", lang), use_container_width=True):
+                        st.markdown(f"##### ⚙️ {t('gdt_btn_manual_options', lang)}")
+                        
+                        opt_tab1, opt_tab2, opt_tab3 = st.tabs([
+                            t("gdt_btn_update_token", lang),
+                            "⚡ Bookmarklet",
+                            t("gdt_btn_delete_acc", lang)
+                        ])
+                        
+                        with opt_tab1:
+                            st.caption(f"Dán chuỗi Bearer Token / Cookie mới cho **{current_acc['account_name']}**:")
+                            new_tok_input = st.text_area(
+                                "New Token",
+                                value="",
+                                placeholder="eyJhbGciOiJIUzUxMiJ9...",
+                                height=80,
+                                label_visibility="collapsed",
+                                key=f"txt_new_tok_{current_acc['id']}"
+                            )
+                            if st.button("💾 " + ("Xác nhận Lưu Token Mới" if lang=="vi" else "Save New Token"), type="primary", use_container_width=True, key=f"btn_save_tok_{current_acc['id']}"):
+                                if new_tok_input.strip():
+                                    ok_up, msg_up = db.update_gdt_account_token(current_acc["id"], new_tok_input.strip(), user_id=current_user)
+                                    if ok_up:
+                                        st.success(msg_up)
+                                        time.sleep(0.8)
+                                        st.rerun()
+                                    else:
+                                        st.error(msg_up)
+                                else:
+                                    st.error("Vui lòng dán Token mới!")
+                                    
+                        with opt_tab2:
+                            st.caption("Dán đoạn mã này vào console/bookmarklet trên tab thuế để tự động copy Token:")
+                            st.code(GDTTaxSync.get_bookmarklet_code(), language="javascript")
+                            
+                        with opt_tab3:
+                            st.warning(f"⚠️ {t('gdt_delete_confirm', lang)}")
+                            st.markdown(f"• **Doanh nghiệp:** `{current_acc['account_name']}`  \n• **MST:** `{current_acc['mst']}`")
+                            if st.button(t("gdt_btn_confirm_delete", lang), type="primary", use_container_width=True, key=f"btn_del_acc_{current_acc['id']}"):
+                                ok_del, msg_del = db.delete_gdt_account(current_acc["id"], user_id=current_user)
+                                if ok_del:
+                                    st.success(msg_del)
+                                    if "gdt_invoices" in st.session_state:
+                                        st.session_state["gdt_invoices"] = []
                                     time.sleep(0.8)
                                     st.rerun()
                                 else:
-                                    st.error(msg_up)
-                            else:
-                                st.error("Vui lòng dán Token mới!")
-
-                with btn_c2:
-                    with st.popover(t("gdt_btn_delete_acc", lang), use_container_width=True):
-                        st.warning(f"⚠️ {t('gdt_delete_confirm', lang)}")
-                        st.markdown(f"• **Doanh nghiệp:** `{current_acc['account_name']}`  \n• **MST:** `{current_acc['mst']}`")
-                        if st.button(t("gdt_btn_confirm_delete", lang), type="primary", use_container_width=True, key=f"btn_del_acc_{current_acc['id']}"):
-                            ok_del, msg_del = db.delete_gdt_account(current_acc["id"], user_id=current_user)
-                            if ok_del:
-                                st.success(msg_del)
-                                if "gdt_invoices" in st.session_state:
-                                    st.session_state["gdt_invoices"] = []
-                                time.sleep(0.8)
-                                st.rerun()
-                            else:
-                                st.error(msg_del)
+                                    st.error(msg_del)
 
                 # ================= KHUNG TRA CỨU HÓA ĐƠN TỔNG CỤC THUẾ =================
                 st.markdown("---")
@@ -1441,7 +1537,7 @@ with tab1:
                         else:
                             st.error(f"❌ {err_q}")
                             if "hết hạn" in err_q.lower() or "token" in err_q.lower():
-                                st.info("💡 Bạn có thể bấm nút **'🔄 Cập Nhật Token Mới'** ở trên để làm mới phiên làm việc.")
+                                st.info("💡 Bạn có thể bấm nút **'⚡ Tự Động Cập Nhật Token'** ở trên để làm mới phiên làm việc.")
 
                 # Bảng hiển thị danh sách hóa đơn và bộ chọn nạp vào hệ thống
                 if st.session_state.get("gdt_invoices"):
@@ -1540,61 +1636,130 @@ with tab1:
             st.markdown(f"#### {t('gdt_form_add_title', lang)}")
             st.caption("Liên kết tài khoản thuế được lưu vĩnh viễn vào cơ sở dữ liệu riêng tư của bạn. Bạn có thể thêm nhiều doanh nghiệp và chuyển đổi bất kỳ lúc nào.")
             
-            form_c1, form_c2 = st.columns(2)
-            with form_c1:
-                new_comp_name = st.text_input(t("gdt_input_comp_name", lang), placeholder=t("gdt_ph_comp_name", lang), key="new_acc_comp_name")
-                new_comp_mst = st.text_input(t("gdt_input_mst", lang), placeholder="vd: 2601084657", key="new_acc_comp_mst")
-                
-            with form_c2:
-                st.markdown(f"**{t('gdt_token_label', lang)}**")
-                new_token_val = st.text_area(
-                    "Token",
-                    placeholder="eyJhbGciOiJIUzUxMiJ9... (dán Token phiên làm việc)",
-                    height=90,
-                    label_visibility="collapsed",
-                    key="new_acc_token_val"
-                )
-                
-            # Hướng dẫn & Tiện ích Bookmarklet 1-Click
-            with st.expander(t("gdt_bookmarklet_btn", lang) + " / " + t("gdt_token_guide", lang), expanded=True):
-                st.markdown("""
-                * **Cách 1 (Siêu Tốc 1-Click Bookmarklet - Khuyên dùng):**
-                  1. Mở trang [hoadondientu.gdt.gov.vn](https://hoadondientu.gdt.gov.vn) và đăng nhập tài khoản doanh nghiệp.
-                  2. Mở Console (F12) hoặc Dán đoạn mã sau vào thanh địa chỉ trình duyệt và nhấn Enter để Token tự động sao chép vào bộ nhớ:
-                """)
-                st.code(GDTTaxSync.get_bookmarklet_code(), language="javascript")
-                st.markdown("""
-                * **Cách 2 (Thủ công qua F12 Network):**
-                  1. Trên trang thuế -> Nhấn **F12** -> Tab **Network** -> Bấm vào chức năng *Tra cứu hóa đơn*.
-                  2. Chọn 1 dòng request tên `purchase` hoặc `sold` -> Tìm mục `Authorization` trong Request Headers -> Copy chuỗi sau `Bearer ` và dán vào ô bên trên.
-                """)
-
-            if st.button(t("gdt_btn_save_permanent", lang), type="primary", use_container_width=True, key="btn_save_permanent_link"):
-                tok_clean = new_token_val.replace("Bearer ", "").strip()
-                if not tok_clean:
-                    st.error("Vui lòng dán Bearer Token phiên làm việc từ cổng Tổng Cục Thuế!")
-                else:
-                    # Tự động suy luận MST từ token nếu chưa nhập
-                    parsed_tok = GDTTaxSync.parse_jwt_token_info(tok_clean)
-                    final_mst = new_comp_mst.strip() or parsed_tok.get("mst", "")
-                    final_name = new_comp_name.strip() or f"Doanh Nghiệp MST {final_mst}"
+            tab_add_auto, tab_add_manual = st.tabs([t("gdt_method_auto_add", lang), t("gdt_method_token_add", lang)])
+            
+            # --- TAB THÊM TỰ ĐỘNG ---
+            with tab_add_auto:
+                col_n1, col_n2 = st.columns(2)
+                with col_n1:
+                    new_auto_name = st.text_input(t("gdt_input_comp_name", lang), placeholder=t("gdt_ph_comp_name", lang), key="new_auto_name")
+                    new_auto_mst = st.text_input(t("gdt_input_mst", lang), placeholder="vd: 2601084657", key="new_auto_mst")
+                with col_n2:
+                    new_auto_pwd = st.text_input(t("gdt_password_label", lang), type="password", placeholder="Nhập mật khẩu thuế...", key="new_auto_pwd")
                     
-                    if not final_mst:
+                    # Captcha cho form thêm mới
+                    if "cap_new_add" not in st.session_state or not st.session_state["cap_new_add"].get("key"):
+                        ok_nc, k_nc, ocr_nc, b64_nc, err_nc = GDTTaxSync.get_captcha_with_auto_ocr()
+                        st.session_state["cap_new_add"] = {"key": k_nc, "ocr": ocr_nc, "b64": b64_nc, "err": err_nc}
+                        
+                    ncap = st.session_state["cap_new_add"]
+                    st.markdown(f"<span style='font-size: 12.5px; font-weight: 600;'>{t('gdt_captcha_ocr_label', lang)}</span>", unsafe_allow_html=True)
+                    n_col_img, n_col_txt = st.columns([1.1, 1.9])
+                    with n_col_img:
+                        if ncap.get("b64"):
+                            st.markdown(
+                                f'<div style="background: #FFFFFF; padding: 3px 6px; border-radius: 6px; border: 1px solid #CBD5E1; display: inline-block; margin-top: 4px;">'
+                                f'<img src="data:image/png;base64,{ncap["b64"]}" height="34" style="display: block;" />'
+                                f'</div>',
+                                unsafe_allow_html=True
+                            )
+                    with n_col_txt:
+                        new_cap_val = st.text_input("Captcha Add", value=ncap.get("ocr", ""), label_visibility="collapsed", key="new_add_cap_val")
+                        
+                chk_new_save_pwd = st.checkbox(t("gdt_save_pwd_chk", lang), value=True, key="chk_new_save_pwd")
+                
+                if st.button(t("gdt_btn_save_permanent", lang), type="primary", use_container_width=True, key="btn_exec_add_auto"):
+                    if not new_auto_mst.strip():
                         st.error("Vui lòng nhập Mã số thuế Doanh nghiệp (MST)!")
+                    elif not new_auto_pwd.strip():
+                        st.error("Vui lòng nhập Mật khẩu tra cứu hóa đơn điện tử!")
+                    elif not new_cap_val.strip() or not ncap.get("key"):
+                        st.error("Vui lòng nhập mã Captcha xác thực!")
                     else:
-                        ok_save, msg_save, saved_id = db.save_gdt_account(
-                            user_id=current_user,
-                            account_name=final_name,
-                            mst=final_mst,
-                            token=tok_clean
-                        )
-                        if ok_save:
-                            st.balloons()
-                            st.success(msg_save)
-                            time.sleep(1.2)
-                            st.rerun()
+                        with st.spinner("Đang kết nối Tổng Cục Thuế lấy mã Token phiên làm việc..."):
+                            auth_ok, tok_res, raw_data = GDTTaxSync.authenticate(
+                                username=new_auto_mst.strip(),
+                                password=new_auto_pwd.strip(),
+                                ckey=ncap["key"],
+                                cvalue=new_cap_val.strip()
+                            )
+                            if auth_ok:
+                                final_name = new_auto_name.strip() or f"Doanh Nghiệp MST {new_auto_mst.strip()}"
+                                pwd_save = new_auto_pwd.strip() if chk_new_save_pwd else ""
+                                ok_save, msg_save, saved_id = db.save_gdt_account(
+                                    user_id=current_user,
+                                    account_name=final_name,
+                                    mst=new_auto_mst.strip(),
+                                    token=tok_res,
+                                    tax_password=pwd_save
+                                )
+                                st.session_state.pop("cap_new_add", None)
+                                st.balloons()
+                                st.success(msg_save)
+                                time.sleep(1.0)
+                                st.rerun()
+                            else:
+                                st.error(f"❌ {tok_res}")
+                                ok_nc, k_nc, ocr_nc, b64_nc, err_nc = GDTTaxSync.get_captcha_with_auto_ocr()
+                                st.session_state["cap_new_add"] = {"key": k_nc, "ocr": ocr_nc, "b64": b64_nc, "err": err_nc}
+                                
+            # --- TAB THÊM THỦ CÔNG QUA TOKEN ---
+            with tab_add_manual:
+                form_c1, form_c2 = st.columns(2)
+                with form_c1:
+                    new_comp_name = st.text_input(t("gdt_input_comp_name", lang), placeholder=t("gdt_ph_comp_name", lang), key="new_acc_comp_name")
+                    new_comp_mst = st.text_input(t("gdt_input_mst", lang), placeholder="vd: 2601084657", key="new_acc_comp_mst")
+                    
+                with form_c2:
+                    st.markdown(f"**{t('gdt_token_label', lang)}**")
+                    new_token_val = st.text_area(
+                        "Token",
+                        placeholder="eyJhbGciOiJIUzUxMiJ9... (dán Token phiên làm việc)",
+                        height=90,
+                        label_visibility="collapsed",
+                        key="new_acc_token_val"
+                    )
+                    
+                # Hướng dẫn & Tiện ích Bookmarklet 1-Click
+                with st.expander(t("gdt_bookmarklet_btn", lang) + " / " + t("gdt_token_guide", lang), expanded=True):
+                    st.markdown("""
+                    * **Cách 1 (Siêu Tốc 1-Click Bookmarklet):**
+                      1. Mở trang [hoadondientu.gdt.gov.vn](https://hoadondientu.gdt.gov.vn) và đăng nhập tài khoản doanh nghiệp.
+                      2. Mở Console (F12) hoặc Dán đoạn mã sau vào thanh địa chỉ trình duyệt và nhấn Enter để Token tự động sao chép:
+                    """)
+                    st.code(GDTTaxSync.get_bookmarklet_code(), language="javascript")
+                    st.markdown("""
+                    * **Cách 2 (Thủ công qua F12 Network):**
+                      1. Trên trang thuế -> Nhấn **F12** -> Tab **Network** -> Bấm *Tra cứu hóa đơn*.
+                      2. Chọn request `purchase` hoặc `sold` -> Copy chuỗi sau `Bearer ` và dán vào ô bên trên.
+                    """)
+
+                if st.button("💾 " + ("Lưu Liên Kết Thủ Công" if lang=="vi" else "Save Manual Connection"), type="primary", use_container_width=True, key="btn_save_permanent_link"):
+                    tok_clean = new_token_val.replace("Bearer ", "").strip()
+                    if not tok_clean:
+                        st.error("Vui lòng dán Bearer Token phiên làm việc từ cổng Tổng Cục Thuế!")
+                    else:
+                        parsed_tok = GDTTaxSync.parse_jwt_token_info(tok_clean)
+                        final_mst = new_comp_mst.strip() or parsed_tok.get("mst", "")
+                        final_name = new_comp_name.strip() or f"Doanh Nghiệp MST {final_mst}"
+                        
+                        if not final_mst:
+                            st.error("Vui lòng nhập Mã số thuế Doanh nghiệp (MST)!")
                         else:
-                            st.error(msg_save)
+                            ok_save, msg_save, saved_id = db.save_gdt_account(
+                                user_id=current_user,
+                                account_name=final_name,
+                                mst=final_mst,
+                                token=tok_clean
+                            )
+                            if ok_save:
+                                st.balloons()
+                                st.success(msg_save)
+                                time.sleep(1.0)
+                                st.rerun()
+                            else:
+                                st.error(msg_save)
+
 
 # =========================================================================
 # TAB 2: BẢNG KÊ & NHÀ CUNG CẤP

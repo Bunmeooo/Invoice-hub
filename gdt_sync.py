@@ -25,7 +25,20 @@ from validator import InvoiceValidator
 
 GDT_BASE_URL = "https://hoadondientu.gdt.gov.vn"
 
+_OCR_ENGINE = None
+
+def _get_ocr():
+    global _OCR_ENGINE
+    if _OCR_ENGINE is None:
+        try:
+            import ddddocr
+            _OCR_ENGINE = ddddocr.DdddOcr(show_ad=False)
+        except Exception:
+            _OCR_ENGINE = False
+    return _OCR_ENGINE if _OCR_ENGINE is not False else None
+
 class GDTTaxSync:
+
     """Quản lý kết nối và đồng bộ hóa đơn với Tổng Cục Thuế"""
     
     DEFAULT_HEADERS = {
@@ -112,9 +125,9 @@ class GDTTaxSync:
         Lấy mã Captcha từ Tổng cục Thuế.
         Returns:
             (success: bool, captcha_key: str, captcha_content: str, error_msg: str)
-            captcha_content có thể là chuỗi Base64 image hoặc SVG
+            captcha_content là chuỗi SVG
         """
-        url = f"{GDT_BASE_URL}/captcha"
+        url = f"{GDT_BASE_URL}/api/captcha"
         try:
             resp = requests.get(url, headers=GDTTaxSync.DEFAULT_HEADERS, timeout=timeout)
             if resp.status_code == 200:
@@ -128,6 +141,31 @@ class GDTTaxSync:
             return False, "", "", f"Không thể kết nối đến máy chủ Tổng Cục Thuế: {str(e)}"
 
     @staticmethod
+    def get_captcha_with_auto_ocr(timeout: int = 10) -> Tuple[bool, str, str, str, str]:
+        """
+        Lấy Captcha, render sang PNG và tự động nhận diện ký tự bằng OCR.
+        Returns:
+            (success: bool, ckey: str, ocr_text: str, png_b64: str, error_msg: str)
+        """
+        ok, key, svg_content, err = GDTTaxSync.get_captcha(timeout=timeout)
+        if not ok:
+            return False, "", "", "", err
+            
+        png_b64 = ""
+        ocr_text = ""
+        try:
+            import resvg_py
+            png_bytes = resvg_py.svg_to_bytes(svg_content)
+            png_b64 = base64.b64encode(png_bytes).decode('utf-8')
+            ocr = _get_ocr()
+            if ocr:
+                ocr_text = ocr.classification(png_bytes)
+        except Exception:
+            pass
+            
+        return True, key, ocr_text, png_b64, ""
+
+    @staticmethod
     def authenticate(username: str, password: str, ckey: str, cvalue: str, timeout: int = 15) -> Tuple[bool, str, Dict[str, Any]]:
         """
         Đăng nhập vào hệ thống Hóa đơn điện tử của Tổng Cục Thuế.
@@ -139,7 +177,7 @@ class GDTTaxSync:
         Returns:
             (success: bool, message_or_token: str, raw_response: dict)
         """
-        url = f"{GDT_BASE_URL}/security-taxpayer/authenticate"
+        url = f"{GDT_BASE_URL}/api/security-taxpayer/authenticate"
         payload = {
             "username": username.strip(),
             "password": password.strip(),
@@ -156,10 +194,7 @@ class GDTTaxSync:
                 data = resp.json()
                 token = data.get("token", "")
                 if token:
-                    if not token.startswith("Bearer "):
-                        clean_token = f"Bearer {token}"
-                    else:
-                        clean_token = token
+                    clean_token = token if token.startswith("Bearer ") else f"Bearer {token}"
                     return True, clean_token, data
                 else:
                     return False, "Không nhận được mã xác thực (Token) từ Tổng Cục Thuế.", data
@@ -174,6 +209,43 @@ class GDTTaxSync:
                 return False, f"Máy chủ Tổng Cục Thuế phản hồi lỗi (Mã HTTP {resp.status_code}): {resp.text[:200]}", {}
         except Exception as e:
             return False, f"Lỗi kết nối khi gửi yêu cầu đăng nhập TCT: {str(e)}", {}
+
+    @staticmethod
+    def auto_authenticate_and_renew(username: str, password: str, max_retries: int = 3) -> Tuple[bool, str, str]:
+        """
+        Tự động đăng nhập và làm mới Token hoàn toàn không cần can thiệp.
+        Tự động lấy Captcha, giải mã bằng AI OCR và thử lại tối đa max_retries lần.
+        Returns:
+            (success: bool, token: str, message: str)
+        """
+        clean_user = username.strip()
+        clean_pwd = password.strip()
+        if not clean_user or not clean_pwd:
+            return False, "", "Mã số thuế và Mật khẩu tra cứu thuế không được để trống!"
+            
+        last_err = ""
+        for attempt in range(max_retries):
+            ok, ckey, ocr_code, _, err = GDTTaxSync.get_captcha_with_auto_ocr()
+            if not ok:
+                last_err = err
+                time.sleep(0.5)
+                continue
+                
+            if not ocr_code or len(ocr_code) < 3:
+                time.sleep(0.3)
+                continue
+                
+            auth_ok, token_or_msg, raw = GDTTaxSync.authenticate(clean_user, clean_pwd, ckey, ocr_code)
+            if auth_ok:
+                return True, token_or_msg, "✅ Đăng nhập và làm mới Token thành công!"
+            else:
+                last_err = token_or_msg
+                if "mật khẩu" in token_or_msg.lower() or "khoá" in token_or_msg.lower() or "khóa" in token_or_msg.lower():
+                    return False, "", token_or_msg
+            time.sleep(0.5)
+            
+        return False, "", f"Không thể tự động giải Captcha sau {max_retries} lần thử. Chi tiết: {last_err}"
+
 
     @staticmethod
     def query_invoices(
