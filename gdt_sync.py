@@ -141,15 +141,15 @@ class GDTTaxSync:
             return False, "", "", f"Không thể kết nối đến máy chủ Tổng Cục Thuế: {str(e)}"
 
     @staticmethod
-    def get_captcha_with_auto_ocr(timeout: int = 10) -> Tuple[bool, str, str, str, str]:
+    def get_captcha_with_auto_ocr(timeout: int = 10) -> Tuple[bool, str, str, str, str, str]:
         """
         Lấy Captcha, render sang PNG và tự động nhận diện ký tự bằng OCR.
         Returns:
-            (success: bool, ckey: str, ocr_text: str, png_b64: str, error_msg: str)
+            (success: bool, ckey: str, ocr_text: str, png_b64: str, svg_content: str, error_msg: str)
         """
         ok, key, svg_content, err = GDTTaxSync.get_captcha(timeout=timeout)
         if not ok:
-            return False, "", "", "", err
+            return False, "", "", "", "", err
             
         png_b64 = ""
         ocr_text = ""
@@ -163,7 +163,7 @@ class GDTTaxSync:
         except Exception:
             pass
             
-        return True, key, ocr_text, png_b64, ""
+        return True, key, ocr_text, png_b64, svg_content, ""
 
     @staticmethod
     def authenticate(username: str, password: str, ckey: str, cvalue: str, timeout: int = 15) -> Tuple[bool, str, Dict[str, Any]]:
@@ -211,7 +211,7 @@ class GDTTaxSync:
             return False, f"Lỗi kết nối khi gửi yêu cầu đăng nhập TCT: {str(e)}", {}
 
     @staticmethod
-    def auto_authenticate_and_renew(username: str, password: str, max_retries: int = 3) -> Tuple[bool, str, str]:
+    def auto_authenticate_and_renew(username: str, password: str, max_retries: int = 4) -> Tuple[bool, str, str]:
         """
         Tự động đăng nhập và làm mới Token hoàn toàn không cần can thiệp.
         Tự động lấy Captcha, giải mã bằng AI OCR và thử lại tối đa max_retries lần.
@@ -225,10 +225,10 @@ class GDTTaxSync:
             
         last_err = ""
         for attempt in range(max_retries):
-            ok, ckey, ocr_code, _, err = GDTTaxSync.get_captcha_with_auto_ocr()
+            ok, ckey, ocr_code, _, _, err = GDTTaxSync.get_captcha_with_auto_ocr()
             if not ok:
                 last_err = err
-                time.sleep(0.5)
+                time.sleep(0.3)
                 continue
                 
             if not ocr_code or len(ocr_code) < 3:
@@ -240,11 +240,13 @@ class GDTTaxSync:
                 return True, token_or_msg, "✅ Đăng nhập và làm mới Token thành công!"
             else:
                 last_err = token_or_msg
-                if "mật khẩu" in token_or_msg.lower() or "khoá" in token_or_msg.lower() or "khóa" in token_or_msg.lower():
+                low_msg = token_or_msg.lower()
+                if "mật khẩu" in low_msg or "khoá" in low_msg or "khóa" in low_msg or "tên đăng nhập" in low_msg:
                     return False, "", token_or_msg
-            time.sleep(0.5)
+            time.sleep(0.4)
             
         return False, "", f"Không thể tự động giải Captcha sau {max_retries} lần thử. Chi tiết: {last_err}"
+
 
 
     @staticmethod

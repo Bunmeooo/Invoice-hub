@@ -1366,16 +1366,48 @@ with tab1:
                         st.markdown(f"##### {t('gdt_pop_auto_title', lang)}")
                         st.caption(f"Tự động kết nối Tổng Cục Thuế & gia hạn phiên cho **{current_acc['account_name']}** (MST: `{current_acc['mst']}`):")
                         
-                        # Cache captcha trong session_state để tránh reload liên tục khi gõ phím
+                        saved_tax_pwd = current_acc.get("tax_password", "")
+                        
+                        # 1-CLICK AUTO BUTTON (Nếu đã lưu mật khẩu)
+                        if saved_tax_pwd:
+                            if st.button("⚡ 1-Click Tự Động Làm Mới Token (Bằng AI)", type="primary", use_container_width=True, key=f"btn_quick_auto_{current_acc['id']}"):
+                                with st.spinner("AI đang tự động kết nối và giải mã Captcha với Tổng Cục Thuế..."):
+                                    ok_auto, tok_auto, msg_auto = GDTTaxSync.auto_authenticate_and_renew(
+                                        username=current_acc["mst"],
+                                        password=saved_tax_pwd,
+                                        max_retries=4
+                                    )
+                                    if ok_auto:
+                                        db.update_gdt_account_token(
+                                            account_id=current_acc["id"],
+                                            new_token=tok_auto,
+                                            user_id=current_user,
+                                            tax_password=saved_tax_pwd
+                                        )
+                                        st.toast(t("gdt_auto_success", lang), icon="🎉")
+                                        st.success(t("gdt_auto_success", lang))
+                                        time.sleep(0.8)
+                                        st.rerun()
+                                    else:
+                                        st.error(f"❌ {msg_auto}")
+                            st.markdown("<div style='text-align: center; color: #64748B; font-size: 11px; margin: 4px 0;'>— HOẶC ĐIỀU CHỈNH THÔNG TIN BÊN DƯỚI —</div>", unsafe_allow_html=True)
+
+                        # Cache captcha trong session_state
                         cap_sess_k = f"cap_gdt_acc_{current_acc['id']}"
                         if cap_sess_k not in st.session_state or not st.session_state[cap_sess_k].get("key"):
-                            ok_c, k_c, ocr_c, b64_c, err_c = GDTTaxSync.get_captcha_with_auto_ocr()
-                            st.session_state[cap_sess_k] = {"key": k_c, "ocr": ocr_c, "b64": b64_c, "err": err_c}
+                            ok_c, k_c, ocr_c, b64_c, svg_c, err_c = GDTTaxSync.get_captcha_with_auto_ocr()
+                            st.session_state[cap_sess_k] = {"key": k_c, "ocr": ocr_c, "b64": b64_c, "svg": svg_c, "err": err_c}
                             
                         curr_cap = st.session_state[cap_sess_k]
                         
+                        # Nếu key vẫn trống (lần đầu chưa tải kịp), thử lại ngay
+                        if not curr_cap.get("key"):
+                            ok_c, k_c, ocr_c, b64_c, svg_c, err_c = GDTTaxSync.get_captcha_with_auto_ocr()
+                            if ok_c:
+                                st.session_state[cap_sess_k] = {"key": k_c, "ocr": ocr_c, "b64": b64_c, "svg": svg_c, "err": ""}
+                                curr_cap = st.session_state[cap_sess_k]
+                        
                         # Ô nhập mật khẩu thuế (Nếu đã lưu thì điền sẵn)
-                        saved_tax_pwd = current_acc.get("tax_password", "")
                         auto_tax_pwd = st.text_input(
                             t("gdt_password_label", lang),
                             value=saved_tax_pwd,
@@ -1388,10 +1420,18 @@ with tab1:
                         st.markdown(f"<span style='font-size: 12.5px; font-weight: 600;'>{t('gdt_captcha_ocr_label', lang)}</span>", unsafe_allow_html=True)
                         col_cap_img, col_cap_txt = st.columns([1.1, 1.9])
                         with col_cap_img:
-                            if curr_cap.get("b64"):
+                            if curr_cap.get("svg"):
+                                svg_clean = curr_cap["svg"].replace('width="200"', 'width="145"').replace('height="40"', 'height="34"')
                                 st.markdown(
-                                    f'<div style="background: #FFFFFF; padding: 3px 6px; border-radius: 6px; border: 1px solid #CBD5E1; display: inline-block; margin-top: 4px;">'
-                                    f'<img src="data:image/png;base64,{curr_cap["b64"]}" height="34" style="display: block;" />'
+                                    f'<div style="background: #FFFFFF; padding: 2px 4px; border-radius: 6px; border: 1px solid #CBD5E1; display: inline-flex; align-items: center; justify-content: center; height: 38px; overflow: hidden; margin-top: 2px;">'
+                                    f'{svg_clean}'
+                                    f'</div>',
+                                    unsafe_allow_html=True
+                                )
+                            elif curr_cap.get("b64"):
+                                st.markdown(
+                                    f'<div style="background: #FFFFFF; padding: 2px 4px; border-radius: 6px; border: 1px solid #CBD5E1; display: inline-flex; align-items: center; justify-content: center; height: 38px; margin-top: 2px;">'
+                                    f'<img src="data:image/png;base64,{curr_cap["b64"]}" height="32" />'
                                     f'</div>',
                                     unsafe_allow_html=True
                                 )
@@ -1408,8 +1448,8 @@ with tab1:
                             
                         # Nút đổi mã Captcha
                         if st.button(f"🔄 {t('gdt_captcha_refresh', lang)}", key=f"btn_ref_cap_{current_acc['id']}"):
-                            ok_c, k_c, ocr_c, b64_c, err_c = GDTTaxSync.get_captcha_with_auto_ocr()
-                            st.session_state[cap_sess_k] = {"key": k_c, "ocr": ocr_c, "b64": b64_c, "err": err_c}
+                            ok_c, k_c, ocr_c, b64_c, svg_c, err_c = GDTTaxSync.get_captcha_with_auto_ocr()
+                            st.session_state[cap_sess_k] = {"key": k_c, "ocr": ocr_c, "b64": b64_c, "svg": svg_c, "err": err_c}
                             st.rerun()
                             
                         chk_save_pwd = st.checkbox(t("gdt_save_pwd_chk", lang), value=True, key=f"chk_save_pwd_{current_acc['id']}")
@@ -1418,21 +1458,39 @@ with tab1:
                         if st.button(t("gdt_btn_run_auto", lang), type="primary", use_container_width=True, key=f"btn_exec_auto_{current_acc['id']}"):
                             if not auto_tax_pwd.strip():
                                 st.error("Vui lòng nhập Mật khẩu tra cứu thuế của doanh nghiệp!")
-                            elif not cap_val_input.strip() or not curr_cap.get("key"):
-                                st.error("Vui lòng nhập mã Captcha xác thực!")
                             else:
-                                with st.spinner("Đang kết nối Tổng Cục Thuế và thẩm định phiên làm việc mới..."):
-                                    auth_ok, token_or_msg, raw_data = GDTTaxSync.authenticate(
-                                        username=current_acc["mst"],
-                                        password=auto_tax_pwd.strip(),
-                                        ckey=curr_cap["key"],
-                                        cvalue=cap_val_input.strip()
-                                    )
-                                    if auth_ok:
+                                with st.spinner("Đang kết nối Tổng Cục Thuế và cập nhật phiên làm việc mới..."):
+                                    auth_success = False
+                                    token_result = ""
+                                    
+                                    if curr_cap.get("key") and cap_val_input.strip():
+                                        ok_auth, tok_msg, _ = GDTTaxSync.authenticate(
+                                            username=current_acc["mst"],
+                                            password=auto_tax_pwd.strip(),
+                                            ckey=curr_cap["key"],
+                                            cvalue=cap_val_input.strip()
+                                        )
+                                        if ok_auth:
+                                            auth_success = True
+                                            token_result = tok_msg
+                                            
+                                    if not auth_success:
+                                        ok_auto, tok_auto, msg_auto = GDTTaxSync.auto_authenticate_and_renew(
+                                            username=current_acc["mst"],
+                                            password=auto_tax_pwd.strip(),
+                                            max_retries=3
+                                        )
+                                        if ok_auto:
+                                            auth_success = True
+                                            token_result = tok_auto
+                                        else:
+                                            token_result = msg_auto
+                                            
+                                    if auth_success:
                                         pwd_to_store = auto_tax_pwd.strip() if chk_save_pwd else ""
                                         ok_db, msg_db = db.update_gdt_account_token(
                                             account_id=current_acc["id"],
-                                            new_token=token_or_msg,
+                                            new_token=token_result,
                                             user_id=current_user,
                                             tax_password=pwd_to_store
                                         )
@@ -1442,9 +1500,9 @@ with tab1:
                                         time.sleep(0.8)
                                         st.rerun()
                                     else:
-                                        st.error(f"❌ {token_or_msg}")
-                                        ok_c, k_c, ocr_c, b64_c, err_c = GDTTaxSync.get_captcha_with_auto_ocr()
-                                        st.session_state[cap_sess_k] = {"key": k_c, "ocr": ocr_c, "b64": b64_c, "err": err_c}
+                                        st.error(f"❌ {token_result}")
+                                        ok_c, k_c, ocr_c, b64_c, svg_c, err_c = GDTTaxSync.get_captcha_with_auto_ocr()
+                                        st.session_state[cap_sess_k] = {"key": k_c, "ocr": ocr_c, "b64": b64_c, "svg": svg_c, "err": err_c}
 
                 with btn_c2:
                     with st.popover(t("gdt_btn_manual_options", lang), use_container_width=True):
@@ -1649,20 +1707,36 @@ with tab1:
                     
                     # Captcha cho form thêm mới
                     if "cap_new_add" not in st.session_state or not st.session_state["cap_new_add"].get("key"):
-                        ok_nc, k_nc, ocr_nc, b64_nc, err_nc = GDTTaxSync.get_captcha_with_auto_ocr()
-                        st.session_state["cap_new_add"] = {"key": k_nc, "ocr": ocr_nc, "b64": b64_nc, "err": err_nc}
+                        ok_nc, k_nc, ocr_nc, b64_nc, svg_nc, err_nc = GDTTaxSync.get_captcha_with_auto_ocr()
+                        st.session_state["cap_new_add"] = {"key": k_nc, "ocr": ocr_nc, "b64": b64_nc, "svg": svg_nc, "err": err_nc}
                         
                     ncap = st.session_state["cap_new_add"]
+                    if not ncap.get("key"):
+                        ok_nc, k_nc, ocr_nc, b64_nc, svg_nc, err_nc = GDTTaxSync.get_captcha_with_auto_ocr()
+                        if ok_nc:
+                            st.session_state["cap_new_add"] = {"key": k_nc, "ocr": ocr_nc, "b64": b64_nc, "svg": svg_nc, "err": ""}
+                            ncap = st.session_state["cap_new_add"]
+                            
                     st.markdown(f"<span style='font-size: 12.5px; font-weight: 600;'>{t('gdt_captcha_ocr_label', lang)}</span>", unsafe_allow_html=True)
                     n_col_img, n_col_txt = st.columns([1.1, 1.9])
                     with n_col_img:
-                        if ncap.get("b64"):
+                        if ncap.get("svg"):
+                            svg_clean = ncap["svg"].replace('width="200"', 'width="145"').replace('height="40"', 'height="34"')
                             st.markdown(
-                                f'<div style="background: #FFFFFF; padding: 3px 6px; border-radius: 6px; border: 1px solid #CBD5E1; display: inline-block; margin-top: 4px;">'
-                                f'<img src="data:image/png;base64,{ncap["b64"]}" height="34" style="display: block;" />'
+                                f'<div style="background: #FFFFFF; padding: 2px 4px; border-radius: 6px; border: 1px solid #CBD5E1; display: inline-flex; align-items: center; justify-content: center; height: 38px; overflow: hidden; margin-top: 2px;">'
+                                f'{svg_clean}'
                                 f'</div>',
                                 unsafe_allow_html=True
                             )
+                        elif ncap.get("b64"):
+                            st.markdown(
+                                f'<div style="background: #FFFFFF; padding: 2px 4px; border-radius: 6px; border: 1px solid #CBD5E1; display: inline-flex; align-items: center; justify-content: center; height: 38px; margin-top: 2px;">'
+                                f'<img src="data:image/png;base64,{ncap["b64"]}" height="32" />'
+                                f'</div>',
+                                unsafe_allow_html=True
+                            )
+                        else:
+                            st.caption("Đang tải Captcha...")
                     with n_col_txt:
                         new_cap_val = st.text_input("Captcha Add", value=ncap.get("ocr", ""), label_visibility="collapsed", key="new_add_cap_val")
                         
@@ -1673,17 +1747,34 @@ with tab1:
                         st.error("Vui lòng nhập Mã số thuế Doanh nghiệp (MST)!")
                     elif not new_auto_pwd.strip():
                         st.error("Vui lòng nhập Mật khẩu tra cứu hóa đơn điện tử!")
-                    elif not new_cap_val.strip() or not ncap.get("key"):
-                        st.error("Vui lòng nhập mã Captcha xác thực!")
                     else:
                         with st.spinner("Đang kết nối Tổng Cục Thuế lấy mã Token phiên làm việc..."):
-                            auth_ok, tok_res, raw_data = GDTTaxSync.authenticate(
-                                username=new_auto_mst.strip(),
-                                password=new_auto_pwd.strip(),
-                                ckey=ncap["key"],
-                                cvalue=new_cap_val.strip()
-                            )
-                            if auth_ok:
+                            auth_success = False
+                            tok_res = ""
+                            if ncap.get("key") and new_cap_val.strip():
+                                ok_a, t_msg, _ = GDTTaxSync.authenticate(
+                                    username=new_auto_mst.strip(),
+                                    password=new_auto_pwd.strip(),
+                                    ckey=ncap["key"],
+                                    cvalue=new_cap_val.strip()
+                                )
+                                if ok_a:
+                                    auth_success = True
+                                    tok_res = t_msg
+                                    
+                            if not auth_success:
+                                ok_auto, t_auto, m_auto = GDTTaxSync.auto_authenticate_and_renew(
+                                    username=new_auto_mst.strip(),
+                                    password=new_auto_pwd.strip(),
+                                    max_retries=3
+                                )
+                                if ok_auto:
+                                    auth_success = True
+                                    tok_res = t_auto
+                                else:
+                                    tok_res = m_auto
+                                    
+                            if auth_success:
                                 final_name = new_auto_name.strip() or f"Doanh Nghiệp MST {new_auto_mst.strip()}"
                                 pwd_save = new_auto_pwd.strip() if chk_new_save_pwd else ""
                                 ok_save, msg_save, saved_id = db.save_gdt_account(
@@ -1700,8 +1791,9 @@ with tab1:
                                 st.rerun()
                             else:
                                 st.error(f"❌ {tok_res}")
-                                ok_nc, k_nc, ocr_nc, b64_nc, err_nc = GDTTaxSync.get_captcha_with_auto_ocr()
-                                st.session_state["cap_new_add"] = {"key": k_nc, "ocr": ocr_nc, "b64": b64_nc, "err": err_nc}
+                                ok_nc, k_nc, ocr_nc, b64_nc, svg_nc, err_nc = GDTTaxSync.get_captcha_with_auto_ocr()
+                                st.session_state["cap_new_add"] = {"key": k_nc, "ocr": ocr_nc, "b64": b64_nc, "svg": svg_nc, "err": err_nc}
+
                                 
             # --- TAB THÊM THỦ CÔNG QUA TOKEN ---
             with tab_add_manual:
